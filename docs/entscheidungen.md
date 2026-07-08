@@ -17,16 +17,38 @@ Projekt allein ca. 168 KB gekostet) - Firmware-Update nur per lokalem
 `.bin`-Upload, dafuer ein Link zu den GitHub-Releases zum manuellen
 Herunterladen (identisches Vorgehen wie dort).
 
-### Custom-Partitionstabelle fuer OTA (partitions_ota.csv)
-OTA braucht zwei App-Slots (ota_0/ota_1) statt der einen App-Partition im
-PlatformIO-Standardschema. Eigene Tabelle auf dem 4-MB-Flash (32 Mbit laut
-Datenblatt): nvs 20K, otadata 8K, app0 1280K, app1 1280K, spiffs (LittleFS)
-1472K. app0/app1 sind genauso gross wie die bisherige einzelne
-App-Partition (aktuelle Firmware liegt bei ~73%, ~350 KB Reserve je Slot),
-LittleFS bleibt mit 1472K weit ueber dem Bedarf der 24-Zeilen
-`history.csv`. Verifiziert mit `gen_esp32part.py` gegen die tatsaechlich
-generierte `partitions.bin` (nicht nur angenommen) - Ausgabe zeigt exakt
-die erwarteten ota_0/ota_1/spiffs-Eintraege.
+### Custom-Partitionstabelle fuer OTA (partitions_ota.csv) - Korrektur, war unnoetig
+
+**Korrektur (nachtraeglich, beim Entwurf des Sensormeter-WLAN-Projekts
+aufgefallen):** Die Aussage unten, das PlatformIO-Standardschema habe nur
+eine einzelne App-Partition, war **falsch** und wurde nie tatsaechlich
+gegen den unveraenderten Standard geprueft - nur angenommen. Ein
+tatsaechlicher Build des Sensormeter-Projekts (WT32-ETH01, identisches
+`board = esp32dev`, keine eigene `partitions.csv`) zeigt per
+`gen_esp32part.py`, dass das Standardschema fuer dieses Board bereits
+`ota_0`/`ota_1` (je 1280K) mitbringt, dazu `spiffs`/LittleFS (1408K) und
+eine `coredump`-Partition (64K) - OTA haette also auch ohne eigene Tabelle
+funktioniert.
+
+Die eigene `partitions_ota.csv` (nvs 20K, otadata 8K, app0/app1 je 1280K,
+spiffs 1472K) bleibt trotzdem bestehen, da sie funktional gleichwertig ist
+und bereits produktiv verifiziert wurde (siehe unten) - der einzige
+tatsaechliche Unterschied zum Standard ist der Verzicht auf die
+64K-Coredump-Partition zugunsten von 64K mehr LittleFS, was fuer die
+24-Zeilen-`history.csv` ohnehin irrelevant ist. Eine Ruecknahme auf den
+Standard wuerde keinen Vorteil bringen und nur unnoetiges Risiko fuer
+bereits geflashte Geraete schaffen.
+
+Urspruengliche (nicht mehr zutreffende) Begruendung, zur Nachvollziehbarkeit
+belassen: "OTA braucht zwei App-Slots (ota_0/ota_1) statt der einen
+App-Partition im PlatformIO-Standardschema." Eigene Tabelle auf dem
+4-MB-Flash (32 Mbit laut Datenblatt): nvs 20K, otadata 8K, app0 1280K,
+app1 1280K, spiffs (LittleFS) 1472K. app0/app1 sind genauso gross wie die
+bisherige einzelne App-Partition (aktuelle Firmware liegt bei ~73%,
+~350 KB Reserve je Slot). Verifiziert mit `gen_esp32part.py` gegen die
+tatsaechlich generierte `partitions.bin` - Ausgabe zeigt exakt die
+erwarteten ota_0/ota_1/spiffs-Eintraege (nur die falsche Praemisse, dass
+dies noetig sei, wurde nicht hinterfragt).
 
 **Wichtig fuer spaetere Firmware-Updates:** Ein Geraet, das bereits mit der
 alten (Single-App-)Partitionstabelle geflasht wurde, braucht vor dem ersten
