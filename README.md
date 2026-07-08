@@ -14,6 +14,7 @@ Touch, keine Cloud-Anbindung.
 | [docs/lastenheft.txt](docs/lastenheft.txt) | Fachliche Anforderungen: Hardware, GUI, Betriebsarten, Datenquellen, Fehlerbehandlung |
 | [docs/pflichtenheft.txt](docs/pflichtenheft.txt) | Technische Umsetzung: Softwaremodule, Datenspeicherung, Startup-Flow, Fehlerbehandlung |
 | [docs/implementierungsplan.html](docs/implementierungsplan.html) | Visueller Implementierungsplan P0–P8 (lokal im Browser öffnen) |
+| [docs/entscheidungen.md](docs/entscheidungen.md) | Entscheidungsprotokoll: Pinbelegung, Touch-Ansteuerung, Schriftwahl |
 
 `docs/lastenheft.txt` ist die strukturierte Ausarbeitung der ursprünglichen
 `Beschreibung.txt` (führendes Anforderungsdokument, liegt außerhalb dieses
@@ -30,9 +31,27 @@ Hardware-Alternative (ESP32-S3/Heemol) wurden bewusst **nicht** übernommen.
 
 ## Firmware
 
-Noch nicht begonnen — nächster Schritt laut
-[Implementierungsplan](docs/implementierungsplan.html) ist P0
-(Projektstruktur, Display- und Touch-Grundgerüst).
+`firmware/` ist ein PlatformIO-Projekt (Board `esp32dev`, Framework Arduino).
+Aktueller Stand: **P0 — Display- und Touch-Grundgerüst** (siehe
+[docs/implementierungsplan.html](docs/implementierungsplan.html)).
+
+```
+cd firmware
+pio run              # bauen
+pio run --target upload   # flashen
+pio device monitor   # seriellen Log ansehen (115200 Baud)
+```
+
+Enthalten (P0):
+- TFT_eSPI-Ansteuerung des ST7789P3 (Querbetrieb, 320x240)
+- Touch-Bit-Bang-Treiber (`TouchManager`) inkl. 2-Punkt-Kalibrierung,
+  Kalibrierdaten in NVS (Preferences)
+- Boot-Ablauf: Display init → Touch init → Kalibrierung (falls nötig) →
+  Touch-Testanzeige
+
+Noch nicht verifiziert: reale Hardware (TFT-Pinbelegung über ein passendes
+Referenzdesign erschlossen, nicht am eigenen Board nachgemessen — siehe
+`docs/entscheidungen.md`).
 
 ## Zusammenhang mit dem Sensormeter-Projekt
 
