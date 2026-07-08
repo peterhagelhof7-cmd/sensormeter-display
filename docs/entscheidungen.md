@@ -1,5 +1,54 @@
 # Entscheidungsprotokoll — Sensormeter Display
 
+## P2/P3 — Statusleiste, DHT11-Datenquelle
+
+### NTP-Sync vorgezogen aus P4
+Die permanente Statusleiste (P2) zeigt laut Lastenheft auch Uhrzeit/Datum
+an - ohne funktionierende Zeit waere dieses Element sinnlos. Daher wurde
+ein schlankes `TimeSync`-Modul (NTP via `de.pool.ntp.org`, deutsche
+Zeitzone inkl. Sommerzeit ueber POSIX-TZ-String `CET-1CEST,M3.5.0,M10.5.0/3`)
+bereits jetzt ergaenzt statt komplett auf P4 zu warten. Der volle
+`TimeManager` in P4 (grosse Uhrzeit-Datenquellen-Ansicht) baut auf diesen
+Funktionen auf, ersetzt sie nicht.
+
+### Statusleisten-Layout: zwei Leisten a 36px (11,25% der langen Kante)
+Bildschirmaufteilung zentral in `Layout.h`: Statusleiste oben (Zahnrad,
+WLAN-Balken, DHT11-Werte) und unten (Uhrzeit/Datum), je 36px von 320px
+langer Kante = 11,25%, haelt die 15%-Vorgabe aus `lastenheft.txt` Abschnitt 4
+mit Reserve ein. Der verbleibende Inhaltsbereich (168px) zeigt die aktive
+Datenquelle - fuer P2/P3 fest die DHT11-Ansicht, Umschaltbarkeit folgt mit
+Slide/Static in P5.
+
+### Zahnrad-Symbol vorerst nicht antippbar
+Das Zahnrad wird gezeichnet, reagiert aber noch nicht auf Touch - der
+Einstellungen-Dialog selbst ist erst P5. Antippen aller Statusleisten-Symbole
+wird zusammen mit der Einstellungen-Funktion verdrahtet, um Touch-Zonen
+nicht doppelt zu definieren.
+
+### Bug gefunden und behoben: WLAN-Blink-Symbol haette bei fester 1s-Redrawrate nie geblinkt
+Erster Entwurf redrawte die gesamte UI im festen 1000ms-Takt; das
+WLAN-Blinksymbol schaltet alle 500ms um. 1000ms ist ein exaktes Vielfaches
+von 500ms, d. h. bei jedem Redraw waere immer dieselbe Blink-Phase
+abgetastet worden (Aliasing) - das Symbol haette real nie sichtbar
+geblinkt. Behoben, indem die Statusleiste unabhaengig vom Inhaltsbereich
+alle 300ms neu gezeichnet wird (kein ganzzahliges Vielfaches von 500ms).
+Der Inhaltsbereich (Graph/Werte) wird zusaetzlich nur bei tatsaechlich
+neuer DHT11-Messung neu gezeichnet statt starr im Sekundentakt, spart
+unnoetige Redraws.
+
+### Graph ohne Gitternetz, nur Min/Max-Achsenbeschriftung
+Fuer 24 Punkte auf 168px Inhaltshoehe wurde bewusst auf ein volles
+Gitternetz mit Zwischenwerten verzichtet - zwei Polylinien (Temperatur rot,
+Luftfeuchte blau) plus Min/Max-Werte an den Achsenenden reichen fuer die
+geforderte Aufloesung (volle °C/%) und sparen Bildschirmplatz auf einem
+kleinen Display.
+
+### Ringpuffer-Persistenz: komplette Datei bei jedem neuen Eintrag neu schreiben
+`history.csv` hat maximal 24 Zeilen und wird hoechstens alle 30 Minuten neu
+geschrieben - Flash-Verschleiss ist bei dieser Frequenz irrelevant, ein
+komplexeres Append-Only-Format mit Offset-Verwaltung haette sich nicht
+gelohnt.
+
 ## P1 — WLAN-Ersteinrichtung
 
 ### Bildschirmtastatur: gewichtsbasiertes Zeilenlayout, keine PSK-Maskierung
