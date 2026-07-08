@@ -145,14 +145,14 @@ void GraphManager::drawGraph(DisplayManager &display, int16_t x, int16_t y, int1
 }
 
 void GraphManager::drawFullScreen(DisplayManager &display, float currentTempC, float currentHumidityPct,
-                                   bool sensorValid) {
+                                   bool sensorValid, uint16_t bgColor) {
 	TFT_eSPI &tft = display.raw();
-	tft.fillRect(0, Layout::kContentTop, DisplayManager::kScreenWidth, Layout::kContentHeight, TFT_WHITE);
+	tft.fillRect(0, Layout::kContentTop, DisplayManager::kScreenWidth, Layout::kContentHeight, bgColor);
 
 	int16_t valueAreaH = Layout::kContentHeight / 3;
 	int16_t valueAreaY = Layout::kContentTop;
 
-	tft.setTextColor(TFT_BLACK, TFT_WHITE);
+	tft.setTextColor(TFT_BLACK, bgColor);
 	if (!sensorValid) {
 		tft.setTextDatum(MC_DATUM);
 		tft.setTextFont(4);

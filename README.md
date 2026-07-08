@@ -32,8 +32,10 @@ Hardware-Alternative (ESP32-S3/Heemol) wurden bewusst **nicht** übernommen.
 ## Firmware
 
 `firmware/` ist ein PlatformIO-Projekt (Board `esp32dev`, Framework Arduino).
-Aktueller Stand: **P5 — Einstellungen & Betriebsarten** (siehe
-[docs/implementierungsplan.html](docs/implementierungsplan.html)).
+Aktueller Stand: **P8 — Ping-Überwachung** (siehe
+[docs/implementierungsplan.html](docs/implementierungsplan.html)). P6 (Snake)
+ist als Platzhalter im Menü vorhanden, das Spiel selbst ist optional und noch
+offen.
 
 ```
 cd firmware
@@ -42,7 +44,7 @@ pio run --target upload   # flashen
 pio device monitor   # seriellen Log ansehen (115200 Baud)
 ```
 
-Enthalten (P0–P5):
+Enthalten (P0–P5, P7–P8):
 - TFT_eSPI-Ansteuerung des ST7789P3 (Querbetrieb, 320x240)
 - Touch-Bit-Bang-Treiber (`TouchManager`) inkl. 2-Punkt-Kalibrierung,
   Kalibrierdaten in NVS (Preferences)
@@ -52,7 +54,8 @@ Enthalten (P0–P5):
   automatischer Verbindungsaufbau bei jedem weiteren Start
 - Statusleiste (`StatusBar`): Zahnrad (antippbar, öffnet Einstellungen),
   WLAN-Empfangsbalken (blinkt ohne Verbindung), DHT11-Werte oben;
-  Uhrzeit/Datum unten (entfällt im Static-Modus mit Quelle "Uhrzeit")
+  Uhrzeit/Datum unten (entfällt im Static-Modus mit Quelle "Uhrzeit");
+  wechselt bildschirmweit auf roten Hintergrund bei anhaltendem Ping-Fehler
 - NTP-Zeit (`TimeSync`, vorgezogen aus P4): de.pool.ntp.org, deutsche
   Zeitzone inkl. Sommerzeit
 - DHT11-Datenquelle (`SensorManager`, `GraphManager`): Abfrage alle 5s mit
@@ -61,10 +64,17 @@ Enthalten (P0–P5):
   `history.csv` auf LittleFS
 - Uhrzeit-Datenquelle (`ClockView`): HH:MM groß (oberes zwei Drittel),
   Wochentag + Datum (unteres Drittel)
+- Sensormeter-Datenquelle (`SensormeterClient`, `SensormeterView`): schlanker,
+  selbstgeschriebener SNMP-v1-GET-Client (siehe Entscheidungsprotokoll),
+  Abfrage alle 30s, Temperatur/Luftfeuchte des Sensormeter-Projekts
+- Ping-Datenquellen (`PingManager`, `PingView`): Durchschnitt der letzten
+  5 Latenzen zu google.com; bis zu 5 zusätzliche Ziele als eigene Ansicht
+  (IP + Status, grün/rot); LED blinkt rot bei >1 Min. Ausfall (`LedManager`)
 - Einstellungen (`SettingsUI`, `SettingsManager`, `BacklightManager`):
-  Slide (Intervall 5–60s), Static (Quellenauswahl DHT11/Uhrzeit), Snake
-  (Platzhalter, folgt in P6), Systemeinstellungen (Helligkeit ±,
-  Default 60%, WLAN neu wählen) — alles in NVS persistiert
+  Slide (Intervall 5–60s), Static (Quellenauswahl aus allen 5 Datenquellen),
+  Snake (Platzhalter, Spiel folgt optional in P6), Systemeinstellungen
+  (Helligkeit ±, WLAN neu wählen, Sensormeter-Ziel, Ping-Ziele über
+  `NumericKeypad`) — alles in NVS persistiert
 
 Noch nicht verifiziert: reale Hardware (TFT-Pinbelegung über ein passendes
 Referenzdesign erschlossen, nicht am eigenen Board nachgemessen — siehe

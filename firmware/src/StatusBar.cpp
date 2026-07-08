@@ -49,17 +49,17 @@ void StatusBar::drawWifiIcon(TFT_eSPI &tft, int16_t x, int16_t y, int8_t bars) c
 
 void StatusBar::draw(DisplayManager &display, WlanManager &wlan, bool sensorValid, float tempC,
                       float humidityPct, const String &timeHHMM, const String &dateLine,
-                      bool showBottomBar) {
+                      bool showBottomBar, uint16_t bgColor) {
 	TFT_eSPI &tft = display.raw();
 
 	// --- obere Leiste: Zahnrad, WLAN, DHT11 ---
-	tft.fillRect(0, 0, DisplayManager::kScreenWidth, Layout::kStatusBarHeight, TFT_WHITE);
+	tft.fillRect(0, 0, DisplayManager::kScreenWidth, Layout::kStatusBarHeight, bgColor);
 	tft.drawFastHLine(0, Layout::kStatusBarHeight - 1, DisplayManager::kScreenWidth, TFT_LIGHTGREY);
 
 	drawGearIcon(tft, 18, Layout::kStatusBarHeight / 2, 11);
 	drawWifiIcon(tft, 44, Layout::kStatusBarHeight / 2 - 8, wlan.signalBars());
 
-	tft.setTextColor(kIconColor, TFT_WHITE);
+	tft.setTextColor(kIconColor, bgColor);
 	tft.setTextDatum(MR_DATUM);
 	tft.setTextFont(2);
 	String dhtText = sensorValid
@@ -75,10 +75,10 @@ void StatusBar::draw(DisplayManager &display, WlanManager &wlan, bool sensorVali
 		return;
 	}
 	int16_t barY = Layout::kContentBottom;
-	tft.fillRect(0, barY, DisplayManager::kScreenWidth, Layout::kStatusBarHeight, TFT_WHITE);
+	tft.fillRect(0, barY, DisplayManager::kScreenWidth, Layout::kStatusBarHeight, bgColor);
 	tft.drawFastHLine(0, barY, DisplayManager::kScreenWidth, TFT_LIGHTGREY);
 
-	tft.setTextColor(kIconColor, TFT_WHITE);
+	tft.setTextColor(kIconColor, bgColor);
 	tft.setTextDatum(ML_DATUM);
 	tft.setTextFont(4);
 	tft.drawString(timeHHMM.isEmpty() ? "--:--" : timeHHMM, 8, barY + Layout::kStatusBarHeight / 2);
@@ -87,5 +87,5 @@ void StatusBar::draw(DisplayManager &display, WlanManager &wlan, bool sensorVali
 	tft.setTextFont(2);
 	tft.drawString(dateLine, DisplayManager::kScreenWidth - 8, barY + Layout::kStatusBarHeight / 2);
 	tft.setTextDatum(TL_DATUM);
-	tft.setTextColor(TFT_BLACK, TFT_WHITE);
+	tft.setTextColor(TFT_BLACK, bgColor);
 }

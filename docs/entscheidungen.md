@@ -1,5 +1,83 @@
 # Entscheidungsprotokoll — Sensormeter Display
 
+## P7/P8 — Sensormeter-Anbindung (SNMP), Ping-Überwachung
+
+### OID-Kodierung im Sensormeter-Projekt verifiziert statt angenommen
+`lastenheft.txt` Abschnitt 7.3 nennt die OID-Struktur, aber nicht die
+Kodierung. Im Quellcode des Sensormeter-Projekts nachgesehen
+(`SNMPManager.cpp`): Temperatur/Luftfeuchte sind als `INTEGER x10`
+kodiert (z. B. 235 = 23,5 °C), nicht als Float oder Integer ohne
+Skalierung. `SensormeterClient` teilt entsprechend durch 10.
+
+### Eigener, minimaler SNMP-v1-GET-Client statt Bibliothek
+Es existiert keine gaengige Arduino/PlatformIO-Bibliothek für einen
+SNMP-**Client** (nur für SNMP-**Agenten**, wie die im Sensormeter-Projekt
+selbst verwendete). Da nur zwei feste, bekannte skalare Integer-OIDs alle
+30s abgefragt werden, wurde ein sehr schlanker, hart auf diesen Anwendungsfall
+zugeschnittener BER-Encoder/Decoder geschrieben (`SnmpClient`) statt eine
+vollstaendige SNMP-Implementierung zu bauen oder zu vendorn. Einschraenkungen:
+nur Short-Form-Laengen (Pakete hier immer klein genug), keine explizite
+Auswertung von `errorStatus` (siehe Kommentar in `SnmpClient.cpp`) - im
+Fehlerfall (falsche OID) koennte theoretisch `errorIndex` faelschlich als
+Wert interpretiert werden. Unkritisch, da die OIDs hart einprogrammiert und
+bekannt korrekt sind; realistisches Fehlerbild ist "keine Antwort"
+(Geraet nicht erreichbar), nicht "falsche OID".
+
+### ESP32Ping als Bibliothek statt eigenem ICMP-Code
+Anders als bei SNMP wurde fuer den Ping-Client (P8) eine etablierte
+Bibliothek (`marian-craciunescu/ESP32Ping`) verwendet statt eigenem
+ICMP-Code: Rohes ICMP erfordert tieferen lwIP-Zugriff, den die Bibliothek
+bereits robust kapselt - hier lohnt sich das Vendoring/Selbstschreiben
+nicht wie bei SNMP (dort ist das Protokoll trivial und die Bibliothekslage
+duenn).
+
+### Ping-Zyklus entzerrt (max. 1 Google-Ping + 1 Ziel-Ping pro update())
+Ein Ping-Versuch kann bei Nichterreichbarkeit bis zu ~1s blockieren. Bei
+bis zu 5 zusaetzlichen Zielen haette ein "alle auf einmal"-Ansatz den
+Hauptloop und damit die Touch-Reaktion um mehrere Sekunden blockieren
+koennen. Stattdessen: pro `update()`-Aufruf (alle 2s) genau ein
+Google-Ping UND round-robin genau ein Zusatzziel - begrenzt die
+Blockierzeit pro Aufruf auf ca. 2 Ping-Timeouts.
+
+### Alarmzustand (rote Anzeige) als bgColor-Parameter durchgereicht
+"Ändere die Display-Farbe in rot" (lastenheft.txt Abschnitt 9) gilt
+bildschirmweit, unabhaengig von der aktuell aktiven Datenquelle. Statt
+eines globalen Zustands, den jede View selbst abfragt, wird die
+Hintergrundfarbe als expliziter Parameter an `GraphManager::drawFullScreen`,
+`ClockView::draw`, `SensormeterView::draw`, `PingView::draw*` und
+`StatusBar::draw` durchgereicht - haelt die Views unabhaengig testbar und
+macht die Abhaengigkeit im Funktionssignatur sichtbar. Textfarbe bleibt
+Schwarz (nicht explizit gefordert, Kontrast auf Rot bleibt ausreichend).
+
+### RGB-LED-Polaritaet angenommen (HIGH = an)
+Das Datenblatt spezifiziert nicht, ob die RGB-LED gemeinsame Anode oder
+Kathode hat. `LedManager` nimmt HIGH=an (gemeinsame Kathode) an - am
+eigenen Board zu verifizieren; falls falsch, ist nur die Polaritaet in
+`LedManager::setColor` zu invertieren.
+
+### Sensormeter-Ziel und Ping-Ziele in Systemeinstellungen platziert
+`lastenheft.txt` beschreibt nicht, ueber welchen Bildschirm die
+Sensormeter-IP oder die Ping-Ziel-Liste eingegeben werden. Da
+Systemeinstellungen bereits WLAN-Neukonfiguration (ebenfalls
+netzwerkbezogen) enthaelt, wurden beide dort als zusaetzliche
+Menuepunkte ergaenzt statt einen weiteren Menue-Bereich einzufuehren.
+
+### Numerisches Tastenfeld statt Bildschirmtastatur fuer IP-Eingaben
+IP-Adressen brauchen nur Ziffern und Punkt. Die vorhandene
+Bildschirmtastatur (`WifiOnboarding`, P1) ist auf PSK-Eingabe zugeschnitten
+(Buchstaben+Sonderzeichen) und unnoetig komplex fuer diesen Zweck - stattdessen
+ein eigenes, einfaches Telefon-Tastenfeld (`NumericKeypad`), wiederverwendet
+fuer Sensormeter-Ziel UND Ping-Ziele.
+
+### Bug gefunden und behoben: Static-Quellenliste lief ueber den Bildschirmrand hinaus
+Die Datenquellenliste in den Static-Einstellungen ist mit P7/P8 von 2 auf
+5 Eintraege gewachsen, nutzte aber weiterhin die fuer das 4-Punkt-Hauptmenu
+bemessene Zeilenhoehe (44px) - der 5. Eintrag (Ping-Ziele) waere teilweise
+unterhalb von y=240 gelandet und damit weder sichtbar noch antippbar.
+Behoben mit eigener, kompakterer Zeilenhoehe (40px) nur fuer diese Liste;
+zusaetzlich die Datenquellen-Labels gekuerzt ("Innentemperatur (DHT11)" u. ae.
+waeren in der schmalen Zeile ohnehin abgeschnitten worden).
+
 ## P4/P5 — Uhrzeit-Datenquelle, Einstellungen/Betriebsarten
 
 ### LEDC-API der installierten Arduino-ESP32-Version ist die alte, kanalbasierte

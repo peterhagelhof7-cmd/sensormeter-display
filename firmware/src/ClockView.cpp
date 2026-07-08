@@ -2,12 +2,13 @@
 
 #include "TimeSync.h"
 
-void ClockView::draw(DisplayManager &display, int16_t contentTop, int16_t contentBottom) {
+void ClockView::draw(DisplayManager &display, int16_t contentTop, int16_t contentBottom,
+                      uint16_t bgColor) {
 	TFT_eSPI &tft = display.raw();
 	int16_t h = contentBottom - contentTop;
 
-	tft.fillRect(0, contentTop, DisplayManager::kScreenWidth, h, TFT_WHITE);
-	tft.setTextColor(TFT_BLACK, TFT_WHITE);
+	tft.fillRect(0, contentTop, DisplayManager::kScreenWidth, h, bgColor);
+	tft.setTextColor(TFT_BLACK, bgColor);
 	tft.setTextDatum(MC_DATUM);
 
 	String time = TimeSync::formatTime();

@@ -20,7 +20,7 @@ public:
 	// mit Datenquelle "Uhrzeit" - siehe lastenheft.txt Abschnitt 6.2).
 	void draw(DisplayManager &display, WlanManager &wlan, bool sensorValid, float tempC,
 	          float humidityPct, const String &timeHHMM, const String &dateLine,
-	          bool showBottomBar = true);
+	          bool showBottomBar = true, uint16_t bgColor = TFT_WHITE);
 
 private:
 	void drawGearIcon(TFT_eSPI &tft, int16_t cx, int16_t cy, int16_t r) const;

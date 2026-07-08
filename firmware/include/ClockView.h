@@ -10,5 +10,6 @@
 // SettingsUI/main.cpp).
 class ClockView {
 public:
-	void draw(DisplayManager &display, int16_t contentTop, int16_t contentBottom);
+	void draw(DisplayManager &display, int16_t contentTop, int16_t contentBottom,
+	          uint16_t bgColor = TFT_WHITE);
 };

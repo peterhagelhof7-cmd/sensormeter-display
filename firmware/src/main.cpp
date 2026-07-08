@@ -7,6 +7,11 @@
 #include "SensorManager.h"
 #include "GraphManager.h"
 #include "ClockView.h"
+#include "SensormeterClient.h"
+#include "SensormeterView.h"
+#include "PingManager.h"
+#include "PingView.h"
+#include "LedManager.h"
 #include "StatusBar.h"
 #include "TimeSync.h"
 #include "Layout.h"
@@ -23,6 +28,11 @@ WifiOnboarding onboarding;
 SensorManager sensor;
 GraphManager graph;
 ClockView clockView;
+SensormeterClient sensormeterClient;
+SensormeterView sensormeterView;
+PingManager pingManager;
+PingView pingView;
+LedManager led;
 StatusBar statusBar;
 SettingsManager settings;
 BacklightManager backlight;
@@ -37,16 +47,16 @@ constexpr uint32_t kStatusBarIntervalMs = 300;
 uint32_t slideLastSwitchMs = 0;
 size_t slideIndex = 0;
 bool contentDirty = true;
-uint32_t lastClockRedrawMs = 0;
-constexpr uint32_t kClockRedrawIntervalMs = 5000;
+uint32_t lastPeriodicRedrawMs = 0;
+constexpr uint32_t kPeriodicRedrawIntervalMs = 5000;
 
 void setup() {
 	Serial.begin(115200);
 	delay(200);
-	Serial.println("Sensormeter Display - Boot (P4/P5)");
+	Serial.println("Sensormeter Display - Boot (P7/P8)");
 
 	display.begin();
-	display.drawBootScreen("Sensormeter Display", "P4/P5: Uhrzeit + Einstellungen");
+	display.drawBootScreen("Sensormeter Display", "P7/P8: Sensormeter + Ping");
 
 	touch.begin();
 	if (!touch.isCalibrated()) {
@@ -56,6 +66,7 @@ void setup() {
 
 	settings.begin();
 	backlight.begin(settings.brightnessPercent());
+	led.begin();
 
 	wlan.begin();
 	bool connected = false;
@@ -73,6 +84,7 @@ void setup() {
 	TimeSync::begin();
 	sensor.begin();
 	graph.begin();
+	pingManager.begin();
 }
 
 DataSource currentActiveSource() {
@@ -107,34 +119,66 @@ void loop() {
 		lastStatusBarMs = 0;
 	}
 
-	bool polled = sensor.update();
-	if (polled) {
+	bool dhtPolled = sensor.update();
+	if (dhtPolled) {
 		graph.maybeRecord(sensor.temperatureC(), sensor.humidityPercent());
 	}
+	bool sensormeterPolled =
+	    sensormeterClient.update(settings.sensormeterIp(), settings.sensormeterCommunity());
+	bool pingPolled = pingManager.update(settings);
+
+	// Anhaltender Ping-Fehler (>1 Min. an google.com): LED blinkt rot und
+	// die gesamte Anzeige wechselt auf roten Hintergrund (lastenheft.txt
+	// Abschnitt 9), unabhaengig von der gerade aktiven Datenquelle.
+	bool alertActive = pingManager.isFailingOver1Min();
+	led.update(alertActive);
+	uint16_t bgColor = alertActive ? TFT_RED : TFT_WHITE;
 
 	DataSource activeSource = currentActiveSource();
 	bool showBottomBar = !(settings.mode() == OperatingMode::Static && activeSource == DataSource::Uhrzeit);
 	int16_t contentBottom = showBottomBar ? Layout::kContentBottom : DisplayManager::kScreenHeight;
 
 	uint32_t now = millis();
-	bool clockDue = (activeSource == DataSource::Uhrzeit) && (now - lastClockRedrawMs >= kClockRedrawIntervalMs);
+	bool periodicDue = (now - lastPeriodicRedrawMs >= kPeriodicRedrawIntervalMs);
 
-	if (contentDirty || (activeSource == DataSource::Dht11 && polled) || clockDue) {
-		if (activeSource == DataSource::Dht11) {
-			graph.drawFullScreen(display, sensor.temperatureC(), sensor.humidityPercent(),
-			                     sensor.hasValidReading());
-		} else {
-			clockView.draw(display, Layout::kContentTop, contentBottom);
-			lastClockRedrawMs = now;
+	bool sourceJustPolled = (activeSource == DataSource::Dht11 && dhtPolled) ||
+	                        (activeSource == DataSource::Sensormeter && sensormeterPolled) ||
+	                        ((activeSource == DataSource::Ping || activeSource == DataSource::PingTargets) &&
+	                         pingPolled);
+	// Alarmzustand kann sich jederzeit aendern (z.B. genau nach 60s Ausfall) -
+	// erzwingt in dem Fall ebenfalls ein Neuzeichnen, auch ohne neue Messung.
+	static bool lastAlertActive = false;
+	bool alertChanged = (alertActive != lastAlertActive);
+	lastAlertActive = alertActive;
+
+	if (contentDirty || sourceJustPolled || periodicDue || alertChanged) {
+		switch (activeSource) {
+			case DataSource::Dht11:
+				graph.drawFullScreen(display, sensor.temperatureC(), sensor.humidityPercent(),
+				                     sensor.hasValidReading(), bgColor);
+				break;
+			case DataSource::Uhrzeit:
+				clockView.draw(display, Layout::kContentTop, contentBottom, bgColor);
+				break;
+			case DataSource::Sensormeter:
+				sensormeterView.draw(display, sensormeterClient, Layout::kContentTop, contentBottom, bgColor);
+				break;
+			case DataSource::Ping:
+				pingView.drawAverage(display, pingManager, Layout::kContentTop, contentBottom, bgColor);
+				break;
+			case DataSource::PingTargets:
+				pingView.drawTargetList(display, pingManager, Layout::kContentTop, contentBottom, bgColor);
+				break;
 		}
 		contentDirty = false;
+		lastPeriodicRedrawMs = now;
 	}
 
 	if (now - lastStatusBarMs >= kStatusBarIntervalMs) {
 		lastStatusBarMs = now;
 		statusBar.draw(display, wlan, sensor.hasValidReading(), sensor.temperatureC(),
 		               sensor.humidityPercent(), TimeSync::formatTime(), TimeSync::formatDate(),
-		               showBottomBar);
+		               showBottomBar, bgColor);
 	}
 
 	delay(20);

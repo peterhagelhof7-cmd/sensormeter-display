@@ -20,7 +20,7 @@ public:
 	void maybeRecord(float tempC, float humidityPct);
 
 	void drawFullScreen(DisplayManager &display, float currentTempC, float currentHumidityPct,
-	                     bool sensorValid);
+	                     bool sensorValid, uint16_t bgColor = TFT_WHITE);
 
 private:
 	struct Entry {
