@@ -2,13 +2,21 @@
 
 #include <Arduino.h>
 #include <Preferences.h>
+#include <freertos/semphr.h>
 
 #include "DataSource.h"
 
 // Persistiert die Einstellungen aus lastenheft.txt Abschnitt 6 in NVS
 // (Namespace "settings"): Betriebsmodus, Slide-Intervall, Static-Quelle,
-// Helligkeit, Sensormeter-Ziel, Ping-Ziele. WLAN-Zugangsdaten liegen separat
-// in WlanManager (Namespace "wifi").
+// Helligkeit, Sensormeter-Ziel, Ping-Ziele, Geraetename + Web-Passwort
+// (siehe lastenheft.txt Abschnitt 8, Webserver-Zusatzfunktion). WLAN-
+// Zugangsdaten liegen separat in WlanManager (Namespace "wifi").
+//
+// Mutex-geschuetzt (wie DataManager im Sensormeter-Projekt): wird sowohl
+// aus dem Hauptloop/Touch-UI als auch aus den asynchronen Webserver-
+// Callbacks (ESPAsyncWebServer laeuft in einem eigenen FreeRTOS-Task,
+// nicht im Arduino-Hauptloop) gleichzeitig gelesen/geschrieben - ohne
+// Sperre waere das ein Datenrennen auf den String-Feldern.
 class SettingsManager {
 public:
 	static constexpr uint16_t kSlideIntervalMinSec = 5;
@@ -20,30 +28,41 @@ public:
 
 	void begin();
 
-	OperatingMode mode() const { return mode_; }
-	uint16_t slideIntervalSec() const { return slideIntervalSec_; }
-	DataSource staticSource() const { return staticSource_; }
-	uint8_t brightnessPercent() const { return brightnessPercent_; }
+	OperatingMode mode() const;
+	uint16_t slideIntervalSec() const;
+	DataSource staticSource() const;
+	uint8_t brightnessPercent() const;
 
 	void setSlideMode(uint16_t intervalSec);
 	void setStaticMode(DataSource source);
 	void setBrightnessPercent(uint8_t percent);
 
-	String sensormeterIp() const { return sensormeterIp_; }
-	String sensormeterCommunity() const { return sensormeterCommunity_; }
+	String sensormeterIp() const;
+	String sensormeterCommunity() const;
 	void setSensormeterTarget(const String &ip, const String &community);
 
-	size_t pingTargetCount() const { return pingTargetCount_; }
-	String pingTargetIp(size_t i) const { return (i < pingTargetCount_) ? pingTargets_[i] : String(); }
+	size_t pingTargetCount() const;
+	String pingTargetIp(size_t i) const;
 	// Liefert false, wenn bereits kMaxPingTargets erreicht sind.
 	bool addPingTarget(const String &ip);
 	void removePingTarget(size_t i);
 
+	String deviceName() const;
+	String webPassword() const;
+	void setDeviceName(const String &name);
+	void setWebPassword(const String &password);
+
 private:
+	void load();
 	void save();
 	void savePingTargets();
 
 	Preferences prefs;
+	// Nicht mutable: Take/Give aendern nur den internen FreeRTOS-Zustand des
+	// Semaphors, nicht den Wert des Handles selbst - const-Methoden duerfen
+	// das Handle unveraendert weiterreichen.
+	SemaphoreHandle_t mutex_ = nullptr;
+
 	OperatingMode mode_ = OperatingMode::Slide;
 	uint16_t slideIntervalSec_ = kSlideIntervalDefaultSec;
 	DataSource staticSource_ = DataSource::Dht11;
@@ -54,4 +73,7 @@ private:
 
 	String pingTargets_[kMaxPingTargets];
 	size_t pingTargetCount_ = 0;
+
+	String deviceName_ = "Sensormeter Display";
+	String webPassword_ = "admin";
 };

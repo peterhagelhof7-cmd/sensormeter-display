@@ -1,0 +1,13 @@
+# Name,   Type, SubType, Offset,   Size,     Flags
+# Eigene Partitionstabelle statt PlatformIO-Default: OTA braucht zwei
+# App-Slots (ota_0/ota_1) statt einer einzelnen App-Partition - siehe
+# docs/entscheidungen.md. app0/app1 je 1,25 MB (identisch zur bisherigen
+# einzelnen App-Partition, aktuelle Firmware liegt bei ~70% Auslastung
+# davon), Rest des 4-MB-Flashs (32 Mbit laut Datenblatt) als LittleFS -
+# fuer die 24-Zeilen history.csv weit mehr als noetig, aber ungenutzter
+# Flash haette hier keinen Nutzen.
+nvs,      data, nvs,     0x9000,   0x5000,
+otadata,  data, ota,     0xe000,   0x2000,
+app0,     app,  ota_0,   0x10000,  0x140000,
+app1,     app,  ota_1,   0x150000, 0x140000,
+spiffs,   data, spiffs,  0x290000, 0x170000,

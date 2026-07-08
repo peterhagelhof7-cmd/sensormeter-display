@@ -20,6 +20,8 @@
 #include "BacklightManager.h"
 #include "SettingsUI.h"
 #include "UiHelpers.h"
+#include "OtaManager.h"
+#include "WebServerManager.h"
 
 DisplayManager display;
 TouchManager touch;
@@ -37,6 +39,8 @@ StatusBar statusBar;
 SettingsManager settings;
 BacklightManager backlight;
 SettingsUI settingsUI;
+OtaManager ota;
+WebServerManager webServer(settings, backlight, ota);
 
 uint32_t lastStatusBarMs = 0;
 // 300ms statt z.B. 1000ms, damit das 500ms-Blinken des WLAN-Symbols nicht
@@ -85,6 +89,7 @@ void setup() {
 	sensor.begin();
 	graph.begin();
 	pingManager.begin();
+	webServer.begin();
 }
 
 DataSource currentActiveSource() {

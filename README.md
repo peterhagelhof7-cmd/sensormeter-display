@@ -4,8 +4,10 @@ ESP32-basiertes 2,8"-Touchdisplay-System (Board HW-458B: ESP-WROOM-32 +
 ST7789P3 TFT, 240x320, resistiver 4-Draht-Touch). Zeigt wahlweise
 Innenraumklima (DHT11), Uhrzeit/Datum, Messwerte des
 [Sensormeter](https://github.com/peterhagelhof7-cmd/sensormeter)-Projekts
-(SNMP) oder Ping-Laufzeiten an. WLAN-Konfiguration direkt am Gerät per
-Touch, keine Cloud-Anbindung.
+(SNMP) oder Ping-Laufzeiten an. WLAN-Konfiguration und Bedienung direkt am
+Gerät per Touch, keine Cloud-Anbindung. Zusätzlich ein schlanker
+Einstellungs-Webserver (Systemname, Betriebsmodus, Ping-Ziele,
+Sensormeter-Ziel) inkl. lokalem OTA-Update per `.bin`-Upload.
 
 ## Dokumentation
 
@@ -45,6 +47,13 @@ pio run --target upload   # flashen
 pio device monitor   # seriellen Log ansehen (115200 Baud)
 ```
 
+**Wichtig für den ersten Flash-Vorgang:** Dieses Projekt nutzt eine eigene
+Partitionstabelle (`firmware/partitions_ota.csv`) für OTA-Updates (zwei
+App-Slots statt einer). Ein Gerät, das bereits mit einer älteren Version
+ohne diese Tabelle geflasht wurde, braucht vorher einen vollständigen
+Flash-Löschvorgang (`pio run --target erase`), da sich NVS-/App-Offsets
+verschoben haben.
+
 Enthalten (P0–P8):
 - TFT_eSPI-Ansteuerung des ST7789P3 (Querbetrieb, 320x240)
 - Touch-Bit-Bang-Treiber (`TouchManager`) inkl. 2-Punkt-Kalibrierung,
@@ -78,6 +87,15 @@ Enthalten (P0–P8):
   Snake, Systemeinstellungen (Helligkeit ±, WLAN neu wählen,
   Sensormeter-Ziel, Ping-Ziele über
   `NumericKeypad`) — alles in NVS persistiert
+- Einstellungs-Webserver (`WebServerManager`, async über
+  ESPAsyncWebServer/AsyncTCP, HTTP-Basic-Auth): Systemname, Web-Passwort,
+  Betriebsmodus, Helligkeit, Sensormeter-Ziel, Ping-Ziele (hinzufügen/
+  entfernen) — spiegelt einen Teil der Touch-Einstellungen für
+  Fernkonfiguration, siehe `docs/lastenheft.txt` Abschnitt 11
+- OTA-Update (`OtaManager`): lokaler `.bin`-Upload über die
+  Einstellungsseite (kein Remote-Versionscheck, siehe
+  `docs/entscheidungen.md`), eigene Zwei-Slot-Partitionstabelle
+  (`partitions_ota.csv`)
 
 Noch nicht verifiziert: reale Hardware (TFT-Pinbelegung über ein passendes
 Referenzdesign erschlossen, nicht am eigenen Board nachgemessen — siehe

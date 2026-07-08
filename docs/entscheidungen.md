@@ -1,5 +1,69 @@
 # Entscheidungsprotokoll — Sensormeter Display
 
+## Webserver + OTA (Zusatzfunktion nach P0-P8)
+
+### Async statt synchron (ESPAsyncWebServer/AsyncTCP)
+Wie im Sensormeter-Projekt: async, damit HTTP-Anfragen den Hauptloop
+(Touch, DHT11/Sensormeter/Ping-Polling, Snake) nicht blockieren. Dieselben,
+dort bereits bewaehrten Bibliotheksversionen uebernommen
+(`esp32async/ESPAsyncWebServer@^3.11.2`, `esp32async/AsyncTCP@^3.4.10`).
+
+### Kein REST-API/JSON, kein HTTPS-Client
+Anders als das Sensormeter-Projekt (dort: Dashboard + REST-API) geht es
+hier nur um ein Einstellungsformular - ArduinoJson wurde daher bewusst
+NICHT hinzugefuegt (spart Flash, keine funktionale Notwendigkeit). Ebenso
+kein HTTPS-Client fuer einen Remote-Versionscheck (hätte laut Sensormeter-
+Projekt allein ca. 168 KB gekostet) - Firmware-Update nur per lokalem
+`.bin`-Upload, dafuer ein Link zu den GitHub-Releases zum manuellen
+Herunterladen (identisches Vorgehen wie dort).
+
+### Custom-Partitionstabelle fuer OTA (partitions_ota.csv)
+OTA braucht zwei App-Slots (ota_0/ota_1) statt der einen App-Partition im
+PlatformIO-Standardschema. Eigene Tabelle auf dem 4-MB-Flash (32 Mbit laut
+Datenblatt): nvs 20K, otadata 8K, app0 1280K, app1 1280K, spiffs (LittleFS)
+1472K. app0/app1 sind genauso gross wie die bisherige einzelne
+App-Partition (aktuelle Firmware liegt bei ~73%, ~350 KB Reserve je Slot),
+LittleFS bleibt mit 1472K weit ueber dem Bedarf der 24-Zeilen
+`history.csv`. Verifiziert mit `gen_esp32part.py` gegen die tatsaechlich
+generierte `partitions.bin` (nicht nur angenommen) - Ausgabe zeigt exakt
+die erwarteten ota_0/ota_1/spiffs-Eintraege.
+
+**Wichtig fuer spaetere Firmware-Updates:** Ein Geraet, das bereits mit der
+alten (Single-App-)Partitionstabelle geflasht wurde, braucht vor dem ersten
+Flash dieser Version einen vollstaendigen Flash-Loeschvorgang
+(`pio run --target erase` bzw. `esptool.py erase_flash`), da sich NVS-/
+App-Offsets verschoben haben. Bisher ist noch kein reales Geraet mit einer
+Vorversion geflasht worden, betrifft also aktuell niemanden praktisch.
+
+### Bug gefunden und behoben: Datenrennen auf SettingsManager (fehlender Mutex)
+ESPAsyncWebServer verarbeitet Anfragen in einem eigenen FreeRTOS-Task, NICHT
+im Arduino-Hauptloop. `SettingsManager` wird aber sowohl vom Hauptloop/
+Touch-UI als auch von den Web-Handlern gelesen und geschrieben (z. B.
+Sensormeter-Ziel, Ping-Ziele) - ohne Sperre waere das ein Datenrennen auf
+den `String`-Feldern (Arduino-Strings sind nicht thread-sicher), potenziell
+mit Heap-Korruption oder Absturz. Behoben nach demselben Muster wie
+`DataManager` im Sensormeter-Projekt: ein `SemaphoreHandle_t`-Mutex,
+Getter/Setter nehmen ihn vor jedem Zugriff. `BacklightManager` (einfacher
+LEDC-Registerzugriff) und `OtaManager` (nur waehrend eines einzelnen
+Uploads genutzt) wurden bewusst NICHT zusaetzlich abgesichert - das
+Risiko/der Nutzen einer Sperre steht dort in keinem Verhaeltnis zum
+Aufwand.
+
+### Web-Passwort statt fester Zugangsdaten, aber kein HTTPS
+HTTP-Basic-Auth (Benutzername fest "admin", Passwort einstellbar, Default
+"admin") wie im Sensormeter-Projekt. Das Passwort wird im Formular selbst
+im Klartext vorausgefuellt (`value="..."`) - identische Kompromiss-
+Entscheidung wie beim PSK-Eingabefeld in der WLAN-Ersteinrichtung (P1):
+einfache Kontrolle wichtiger als Sichtschutz auf einem lokalen
+Konfigurationsgeraet, zumal ein Angreifer mit Zugriff auf die
+authentifizierte Seite das Passwort ohnehin schon kennt/kennen muss.
+
+### Ressourcenverbrauch: +63 KB Flash, +400 Byte RAM
+Vorab abgeschaetzt (Analogie zum Sensormeter-Projekt): ca. 97 KB allein fuer
+ESPAsyncWebServer/AsyncTCP/ArduinoJson. Tatsaechlich (ohne ArduinoJson,
+siehe oben): Flash 73,3% (960.453/1.310.720 Byte je App-Slot), RAM 14,4%
+(47.240/327.680 Byte) - deutlich guenstiger als angenommen.
+
 ## P6 — Snake (optional)
 
 ### Touch-Drittel-Ueberschneidung: vertikale Zonen haben Prioritaet

@@ -194,7 +194,25 @@ hinterlegen (kein automatisches Discovery).
 
 ------------------------------------------------------------
 
-11. AUSDRÜCKLICH NICHT TEIL DIESES LASTENHEFTS
+11. WEBSERVER (ZUSATZFUNKTION, NICHT TEIL VON BESCHREIBUNG.TXT)
+
+Nachtrag nach P0-P8: ein schlanker Einstellungs-Webserver (Port 80,
+HTTP-Basic-Auth, Benutzername "admin", Passwort einstellbar) ergänzt die
+Touch-Bedienung um eine Fernkonfigurations-Möglichkeit:
+- Systemname, Web-Passwort
+- Betriebsmodus (Slide + Intervall / Static + Datenquelle)
+- Helligkeit
+- Sensormeter-Ziel (IP + Community)
+- Ping-Ziele (hinzufügen/entfernen, max. 5)
+- Firmware-Update per lokalem .bin-Upload (kein Remote-Versionscheck,
+  siehe docs/entscheidungen.md)
+
+Kein REST-API/JSON, kein Status-Dashboard - die Touch-Oberfläche bleibt die
+primäre Anzeige, der Webserver dient ausschließlich der Konfiguration.
+
+------------------------------------------------------------
+
+12. AUSDRÜCKLICH NICHT TEIL DIESES LASTENHEFTS
 
 Folgende Punkte aus den Vorgänger-Lastenheften wurden bewusst NICHT
 übernommen (Entscheidung des Auftraggebers):
