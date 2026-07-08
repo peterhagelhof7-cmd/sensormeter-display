@@ -17,6 +17,11 @@
 //   TFT_MOSI = 13   TFT_MISO = 12   TFT_SCLK = 14
 //   TFT_CS   = 15   TFT_DC   = 2    TFT_RST  = -1 (an EN, kein eigener Pin)
 //   TFT_BL   = 21   (High = an, siehe Datenblatt)
+//
+// Fuer die Helligkeitsregelung (P5) wird derselbe physische Pin zusaetzlich
+// per LEDC-PWM angesteuert (BacklightManager) - TFT_eSPI schaltet ihn beim
+// Init nur digital ein, ledcAttach() uebernimmt den Pin danach fuer PWM.
+#define BACKLIGHT_PIN 21
 
 // --- Touch (resistiv, XPT2046-artiger Controller, eigener SPI-Bus) ---
 #define TOUCH_PIN_CLK 25

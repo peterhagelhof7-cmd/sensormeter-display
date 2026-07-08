@@ -48,7 +48,8 @@ void StatusBar::drawWifiIcon(TFT_eSPI &tft, int16_t x, int16_t y, int8_t bars) c
 }
 
 void StatusBar::draw(DisplayManager &display, WlanManager &wlan, bool sensorValid, float tempC,
-                      float humidityPct, const String &timeHHMM, const String &dateLine) {
+                      float humidityPct, const String &timeHHMM, const String &dateLine,
+                      bool showBottomBar) {
 	TFT_eSPI &tft = display.raw();
 
 	// --- obere Leiste: Zahnrad, WLAN, DHT11 ---
@@ -68,7 +69,11 @@ void StatusBar::draw(DisplayManager &display, WlanManager &wlan, bool sensorVali
 	tft.drawString(dhtText, DisplayManager::kScreenWidth - 8, Layout::kStatusBarHeight / 2);
 	tft.setTextDatum(TL_DATUM);
 
-	// --- untere Leiste: Uhrzeit/Datum ---
+	// --- untere Leiste: Uhrzeit/Datum (entfaellt im Static-Modus mit
+	// Datenquelle "Uhrzeit" - die Ansicht nutzt diesen Platz dann selbst) ---
+	if (!showBottomBar) {
+		return;
+	}
 	int16_t barY = Layout::kContentBottom;
 	tft.fillRect(0, barY, DisplayManager::kScreenWidth, Layout::kStatusBarHeight, TFT_WHITE);
 	tft.drawFastHLine(0, barY, DisplayManager::kScreenWidth, TFT_LIGHTGREY);

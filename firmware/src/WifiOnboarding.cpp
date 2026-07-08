@@ -3,6 +3,11 @@
 #include <cctype>
 #include <cstring>
 
+#include "UiHelpers.h"
+
+using UiHelpers::hitRect;
+using UiHelpers::waitForTapEvent;
+
 namespace {
 
 constexpr int16_t kScreenW = DisplayManager::kScreenWidth;
@@ -15,26 +20,6 @@ constexpr int16_t kRefreshH = 28;
 
 constexpr int16_t kRowStartY = 40;
 constexpr int16_t kRowHeight = 32;
-
-// Blockiert bis zu einem vollstaendigen Tipp-Zyklus (Druck + Loslassen) und
-// liefert die Koordinate des Drucks. Selbes Muster wie in
-// TouchManager::waitForTap (P0), hier auf Anwendungsebene fuer UI-Screens.
-void waitForTapEvent(TouchManager &touch, int16_t &x, int16_t &y) {
-	int16_t tx, ty;
-	while (!touch.read(tx, ty)) {
-		delay(15);
-	}
-	x = tx;
-	y = ty;
-	delay(150); // Entprellen
-	while (touch.read(tx, ty)) {
-		delay(15);
-	}
-}
-
-bool hitRect(int16_t x, int16_t y, int16_t rx, int16_t ry, int16_t rw, int16_t rh) {
-	return x >= rx && x < (rx + rw) && y >= ry && y < (ry + rh);
-}
 
 void drawNetworkList(DisplayManager &display, const std::vector<WlanManager::NetworkInfo> &networks) {
 	TFT_eSPI &tft = display.raw();

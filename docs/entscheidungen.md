@@ -1,5 +1,43 @@
 # Entscheidungsprotokoll — Sensormeter Display
 
+## P4/P5 — Uhrzeit-Datenquelle, Einstellungen/Betriebsarten
+
+### LEDC-API der installierten Arduino-ESP32-Version ist die alte, kanalbasierte
+`ledcAttach(pin, freq, bits)` (neue, pin-basierte API aus Arduino-ESP32 3.x)
+existiert in der hier per PlatformIO installierten Framework-Version nicht -
+der Compiler schlug `ledcAttachPin` als Alternative vor. `BacklightManager`
+nutzt daher die aeltere Kanal-API (`ledcSetup` + `ledcAttachPin` + `ledcWrite(channel,...)`,
+Kanal 4 gewaehlt, da 0-3 oft von anderen Peripherien/Beispielen belegt sind).
+
+### Nur DHT11 und Uhrzeit in der Static-Quellenauswahl
+`DataSource` (siehe `DataSource.h`) enthaelt aktuell nur die beiden bereits
+implementierten Quellen. Sensormeter (P7) und Ping (P8) werden dort ergaenzt,
+sobald sie existieren - die Auswahlliste in `SettingsUI` iteriert bereits
+generisch ueber `kAvailableDataSources`, erfordert also keine strukturelle
+Aenderung, nur einen weiteren Eintrag.
+
+### Statusleisten-Redraw wird nach dem Schliessen der Einstellungen erzwungen
+Der Einstellungen-Dialog zeichnet vollflaechig ueber die normale Anzeige.
+Nach dessen Rueckkehr werden `contentDirty=true` und `lastStatusBarMs=0`
+gesetzt, damit im naechsten `loop()`-Durchlauf sofort alles neu gezeichnet
+wird statt bis zum naechsten regulaeren Timer zu warten (bis zu 5s
+Uhrzeit-Redraw-Intervall waeren sonst als eingefrorener Bildschirm
+wahrgenommen worden).
+
+### Snake (P6) als Platzhalter in der Modus-Liste
+Der Menuepunkt "Snake" ist bereits Teil des Einstellungen-Dialogs (wie im
+Lastenheft verlangt: Slide/Static/Snake/Systemeinstellungen sind EIN
+gemeinsames Auswahlmenu), zeigt aber nur einen Hinweistext und kehrt zurueck,
+da das eigentliche Spiel erst P6 ist. Vermeidet eine spaetere Restrukturierung
+des Menues.
+
+### Gemeinsame Touch-UI-Bausteine ausgelagert (UiHelpers)
+`hitRect`/`waitForTapEvent` gab es zunaechst nur lokal in
+`WifiOnboarding.cpp` (P1). Mit `SettingsUI` als zweitem Verbraucher wurden
+sie nach `UiHelpers.h/.cpp` verschoben, um Code-Duplikation zu vermeiden -
+bewusst nicht schon in P1 vorgezogen, da zu dem Zeitpunkt noch kein zweiter
+Verbraucher absehbar war.
+
 ## P2/P3 — Statusleiste, DHT11-Datenquelle
 
 ### NTP-Sync vorgezogen aus P4
