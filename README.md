@@ -133,8 +133,9 @@ Die Datenquelle "Sensormeter" fragt das separate
 dokumentiert und implementiert (`.1.3.6.1.4.1.99999.x`) und wird 1:1
 übernommen (siehe `docs/lastenheft.txt` Abschnitt 7.3). Dieselbe OID-Basis
 gilt auch für [Sensormeter WLAN](https://github.com/peterhagelhof7-cmd/sensormeter-wlan)
-(günstigere WLAN-only-Variante, noch in der Doku-Phase) - beide
-Produktlinien lassen sich also ohne Codeänderung hier abfragen.
+(günstigere WLAN-only-Variante, P0–P7 code-vollständig, noch nicht auf
+echter Hardware getestet) - beide Produktlinien lassen sich also ohne
+Codeänderung hier abfragen.
 
 ## Über dieses Projekt
 
