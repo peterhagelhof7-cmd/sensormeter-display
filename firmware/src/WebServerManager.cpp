@@ -2,6 +2,13 @@
 
 #include <Update.h>
 
+#if __has_include("config.h")
+#include "config.h"
+#endif
+#ifndef DEVICE_FIRMWARE_VERSION
+#define DEVICE_FIRMWARE_VERSION "0.0.0"
+#endif
+
 namespace {
 
 String escapeHtml(const String &in) {
@@ -161,6 +168,7 @@ String WebServerManager::buildPage() const {
 
 	// --- Firmware-Update ---
 	html += "<fieldset><legend>Firmware-Update</legend>";
+	html += "<p>Aktuell installiert: " DEVICE_FIRMWARE_VERSION "</p>";
 	html += "<form method=\"POST\" action=\"/ota/upload\" enctype=\"multipart/form-data\">";
 	html += "<input type=\"file\" name=\"file\" accept=\".bin\">";
 	html += "<button type=\"submit\">.bin hochladen</button></form>";

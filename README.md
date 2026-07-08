@@ -49,6 +49,10 @@ Hardware-Alternative (ESP32-S3/Heemol) wurden bewusst **nicht** übernommen.
 ## Firmware
 
 `firmware/` ist ein PlatformIO-Projekt (Board `esp32dev`, Framework Arduino).
+
+**Version:** `0.9.0-rc1` (Beta) — Versionsschema siehe
+[docs/entscheidungen.md](docs/entscheidungen.md#versionierung).
+
 Aktueller Stand: **P0–P8 vollständig** (siehe
 [docs/implementierungsplan.html](docs/implementierungsplan.html)).
 

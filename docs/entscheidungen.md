@@ -662,3 +662,27 @@ darstellen kann — keine Buchstaben. Für Zahlenwerte (Temperatur, Uhrzeit)
 wird Font 7 verwendet; für Text (WLAN-Liste, Bildschirmtastatur, Wochentag)
 ein lesbarer Standard-Font (Font 4), da ein reiner 7-Segment-Font dafür
 technisch nicht ausreicht.
+
+## Versionierung
+
+Anders als die beiden Schwesterprojekte hatte dieses Repo bislang **gar
+keine** Firmware-Versionskonstante - keine `config.h`/`config.h.example`,
+kein `DEVICE_FIRMWARE_VERSION`, keine Anzeige der Version an irgendeiner
+Stelle (weder Touch-UI noch Webserver), obwohl die Weboberfläche bereits
+einen Link auf "Releases auf GitHub" zeigt.
+
+**Nachgezogen, analog zu Sensormeter und Sensormeter WLAN:**
+- `firmware/include/config.h.example` (+lokale `config.h`, per
+  `.gitignore` bereits vorbereitet) neu angelegt mit
+  `DEVICE_FIRMWARE_VERSION "0.9.0-rc1"` (Beta) - gleicher Stand wie die
+  beiden anderen Projekte
+- **Touch-UI**: Version nur im Geräte-Info-Dialog (`InfoUI.cpp`, hinter dem
+  i-Symbol) als vierte Zeile ergänzt - bewusst nicht auf anderen Screens,
+  da dort kein Platz/Bedarf für eine reine Diagnose-Info besteht
+  (Nutzerentscheidung)
+- **Webserver**: im Bereich „Firmware-Update" als „Aktuell installiert:
+  …" ergänzt (`WebServerManager.cpp`)
+
+Versionsnummer zusätzlich in README, One-Pager und Admin-Guide vermerkt,
+wie bei den beiden anderen Projekten. Git-Tags/GitHub-Releases mit
+`.bin`-Artefakt sind - wie dort auch - noch nicht Teil dieser Änderung.

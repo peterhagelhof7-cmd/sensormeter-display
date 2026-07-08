@@ -2,6 +2,13 @@
 
 #include "UiHelpers.h"
 
+#if __has_include("config.h")
+#include "config.h"
+#endif
+#ifndef DEVICE_FIRMWARE_VERSION
+#define DEVICE_FIRMWARE_VERSION "0.0.0"
+#endif
+
 namespace {
 constexpr int16_t kScreenW = DisplayManager::kScreenWidth;
 constexpr int16_t kCloseX = kScreenW - 34;
@@ -20,19 +27,24 @@ void InfoUI::run(DisplayManager &display, TouchManager &touch, SettingsManager &
 	UiHelpers::drawCloseButton(tft, kCloseX, kCloseY, kCloseW, kCloseH);
 
 	tft.setTextFont(2);
-	tft.drawString("Systemname (im Webinterface aenderbar):", 10, 60);
+	tft.drawString("Systemname (im Webinterface aenderbar):", 10, 48);
 	tft.setTextFont(4);
-	tft.drawString(settings.deviceName(), 10, 78);
+	tft.drawString(settings.deviceName(), 10, 66);
 
 	tft.setTextFont(2);
-	tft.drawString("IP-Adresse:", 10, 130);
+	tft.drawString("IP-Adresse:", 10, 94);
 	tft.setTextFont(4);
-	tft.drawString(WiFi.localIP().toString(), 10, 148);
+	tft.drawString(WiFi.localIP().toString(), 10, 112);
 
 	tft.setTextFont(2);
-	tft.drawString("Verbindungsart:", 10, 190);
+	tft.drawString("Verbindungsart:", 10, 140);
 	tft.setTextFont(4);
-	tft.drawString(wlan.hasStaticIp() ? "Statisch" : "DHCP (automatisch)", 10, 208);
+	tft.drawString(wlan.hasStaticIp() ? "Statisch" : "DHCP (automatisch)", 10, 158);
+
+	tft.setTextFont(2);
+	tft.drawString("Firmware:", 10, 186);
+	tft.setTextFont(4);
+	tft.drawString(DEVICE_FIRMWARE_VERSION, 10, 204);
 
 	while (true) {
 		int16_t x, y;

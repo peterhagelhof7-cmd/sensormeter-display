@@ -142,7 +142,8 @@
   <h1>SENSORMETER DISPLAY</h1>
   <div class="subtitle">Admin-Guide — Inbetriebnahme, Touch-Bedienung und Konfiguration über die Weboberfläche</div>
   <div class="badges">
-    <span class="badge badge-orange">HW-458B · ESP32</span>
+    <span class="badge badge-orange">v0.9.0-rc1 · Beta</span>
+    <span class="badge">HW-458B · ESP32</span>
     <span class="badge">Touch-UI · Webserver · OTA</span>
     <span class="badge">github.com/peterhagelhof7-cmd/sensormeter-display</span>
   </div>
@@ -624,12 +625,14 @@ abzulesen (z. B. um das Webinterface aufzurufen).</p>
   <div class="device"><div class="screen">
     <div class="sk-title">Geraete-Info</div>
     <div class="sk-close">X</div>
-    <div style="position:absolute; top:9mm; left:2mm; font-size:2.4mm; color:#555;">Systemname (im Webinterface aenderbar):</div>
-    <div style="position:absolute; top:11.5mm; left:2mm; font-size:3.6mm; font-weight:700;">Sensormeter Display</div>
-    <div style="position:absolute; top:18mm; left:2mm; font-size:2.4mm; color:#555;">IP-Adresse:</div>
-    <div style="position:absolute; top:20.5mm; left:2mm; font-size:3.6mm; font-weight:700;">192.168.1.42</div>
-    <div style="position:absolute; top:27mm; left:2mm; font-size:2.4mm; color:#555;">Verbindungsart:</div>
-    <div style="position:absolute; top:29.5mm; left:2mm; font-size:3.6mm; font-weight:700;">DHCP (automatisch)</div>
+    <div style="position:absolute; top:10.8mm; left:2mm; font-size:2.4mm; color:#555;">Systemname (im Webinterface aenderbar):</div>
+    <div style="position:absolute; top:14.85mm; left:2mm; font-size:3.6mm; font-weight:700;">Sensormeter Display</div>
+    <div style="position:absolute; top:21.15mm; left:2mm; font-size:2.4mm; color:#555;">IP-Adresse:</div>
+    <div style="position:absolute; top:25.2mm; left:2mm; font-size:3.6mm; font-weight:700;">192.168.1.42</div>
+    <div style="position:absolute; top:31.5mm; left:2mm; font-size:2.4mm; color:#555;">Verbindungsart:</div>
+    <div style="position:absolute; top:35.55mm; left:2mm; font-size:3.6mm; font-weight:700;">DHCP (automatisch)</div>
+    <div style="position:absolute; top:41.85mm; left:2mm; font-size:2.4mm; color:#555;">Firmware:</div>
+    <div style="position:absolute; top:45.9mm; left:2mm; font-size:3.6mm; font-weight:700;">0.9.0-rc1</div>
   </div></div>
   <div class="sketch-notes">
     <ul>
@@ -637,6 +640,7 @@ abzulesen (z. B. um das Webinterface aufzurufen).</p>
       <li><b>IP-Adresse</b> — aktuell vom Gerät verwendete Adresse</li>
       <li><b>Verbindungsart</b> — „DHCP“ oder „Statisch“, je nach
       Netzwerk-Konfiguration (Abschnitt 7.4)</li>
+      <li><b>Firmware</b> — aktuell installierte Version (<span class="code">DEVICE_FIRMWARE_VERSION</span>), auch im Webinterface sichtbar (Abschnitt 7.3)</li>
     </ul>
   </div>
 </div>
@@ -729,6 +733,9 @@ werden.</p>
 <h1 class="section" id="sec8"><span class="num">8</span>Firmware-Updates</h1>
 <p>Zwei Wege, eine neue Firmware-Version einzuspielen:</p>
 <h2>8.1 Lokales OTA-Update über das Webinterface</h2>
+<p>Der Bereich „Firmware-Update“ zeigt zuerst die aktuell installierte
+Version (<span class="code">Aktuell installiert: 0.9.0-rc1</span>) — auch
+im Info-Dialog am Gerät sichtbar (Abschnitt 6).</p>
 <ol>
   <li>Neue <span class="code">.bin</span>-Datei besorgen (z. B. von den
   GitHub-Releases, verlinkt unten auf der Webseite)</li>
