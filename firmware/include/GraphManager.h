@@ -37,4 +37,15 @@ private:
 	Entry entries[kMaxEntries];
 	size_t count = 0;
 	time_t lastRecordTs = 0;
+
+	// Redraw-Cache wie in StatusBar (siehe dort/docs/entscheidungen.md):
+	// drawFullScreen() wird bei jedem DHT11-Poll (alle 5s) aufgerufen, auch
+	// wenn sich der gerundete Anzeigewert nicht geaendert hat - ein
+	// bedingungsloser Full-Redraw fuehrte zu sichtbarem Flackern.
+	bool everDrawn = false;
+	bool lastSensorValid = false;
+	int lastTempRounded = 0;
+	int lastHumidityRounded = 0;
+	uint16_t lastBgColor = 0;
+	size_t lastCount = 0;
 };

@@ -1,5 +1,113 @@
 # Entscheidungsprotokoll — Sensormeter Display
 
+## Farbtest (Rot/Gelb/Blau/Gruen/Weiss): echte Ursache gefunden, RGB/BGR-Diagnose war eine Sackgasse
+
+### Korrektur zum Abschnitt "TFT_RGB_ORDER falsch konfiguriert" weiter unten
+Die dortige Diagnose und der "Fix" (`TFT_RGB_ORDER=TFT_RGB`) waren **falsch**.
+Systematischer Test mit vollflaechigem Hintergrund in Rot/Gelb/Gruen/Blau/
+Weiss deckte auf:
+
+1. `TFT_RGB_ORDER=TFT_RGB`/`TFT_BGR` als Build-Flag ist bei
+   `USER_SETUP_LOADED=1` wirkungslos: `User_Setup_Select.h` definiert die
+   Token `TFT_RGB`/`TFT_BGR` (1/0) nur, wenn `USER_SETUP_LOADED` NICHT
+   gesetzt ist - bei uns aber schon. Der Praeprozessor wertet
+   `TFT_RGB_ORDER == 1` dadurch immer als `false` (undefiniertes Token = 0),
+   **unabhaengig davon, ob dort `TFT_RGB` oder `TFT_BGR` steht** - verifiziert
+   per `gcc -E`. Der fruehere "Fix" auf `TFT_RGB` hat also nie etwas
+   veraendert, die MADCTL-Farbreihenfolge war die ganze Zeit BGR.
+2. Nachdem das behoben wurde (numerischer Wert `TFT_RGB_ORDER=1` statt
+   Token), zeigte sich: Rot->Gelb, Gelb->Rot, Gruen->Rosa, Cyan->Blau,
+   Magenta->Gruen, Blau->Blau (korrekt) - UND **Weiss->Schwarz**. Ein
+   Rechenmodell aus den Messpunkten (`OutR = NICHT B`, `OutB = NICHT R`,
+   `OutG = R UND NICHT G`) erklaerte alle sechs Buntfarb-Messungen exakt,
+   sagte aber auch voraus, dass **kein** Eingabewert reines Weiss erzeugen
+   kann - bestaetigt durch den Test. Reines Zuruecksetzen auf
+   `TFT_RGB_ORDER=0` (BGR, numerisch diesmal korrekt wirksam) behob das
+   Weiss-Problem NICHT (weiterhin Schwarz) - die MADCTL-Reihenfolge war also
+   nie die eigentliche Ursache, nur ein Nebenschauplatz.
+
+### Bug gefunden und behoben: TFT_eSPI schaltet INVON standardmaessig ein
+Tatsaechliche Ursache: `TFT_Drivers/ST7789_Init.h` sendet im Standard-
+Initialisierungsablauf unbedingt den Befehl `ST7789_INVON` (Farbinvertierung
+an). Dieses konkrete Panel braucht das nicht/nicht so - mit `INVON` aktiv
+wurde Weiss zu Schwarz und alle Buntfarben verfaelscht dargestellt. Behoben
+mit einem expliziten `tft.invertDisplay(false)` direkt nach `tft.init()` in
+`DisplayManager::begin()`. Nach dem Fix (kombiniert mit `TFT_RGB_ORDER=0`,
+siehe oben) wurden Weiss, Schwarz, Rot, Gruen und Blau alle korrekt am
+echten Geraet verifiziert - keine Farbsubstitutionen mehr noetig,
+`TFT_RED`/`TFT_GREEN`/etc. koennen unveraendert verwendet werden.
+
+**Fuer spaetere Fehlersuche:** Dieser Bug erklaert rueckwirkend vermutlich
+auch den weiter unten dokumentierten "TFT_LIGHTGREY praktisch unsichtbar"-
+Befund - mit aktivem `INVON` waere der (vermeintlich weisse) Hintergrund in
+Wirklichkeit schwarz gewesen, und invertiertes Hellgrau (~definitionsgemaess
+dunkel) haette auf einem tatsaechlich schwarzen Hintergrund ebenfalls kaum
+Kontrast gehabt - ein in sich konsistentes Bild, nur mit vertauschter
+Ausgangsannahme (es war nie "Hellgrau auf Weiss", sondern vermutlich
+"dunkles Grau auf Schwarz").
+
+### Statusleisten-Symbolfarbe: zurueck zu Hellgrau moeglich, dann auf Dunkelgrau angepasst
+Mit behobener Invertierung wurde `TFT_LIGHTGREY` (lastenheft-konform) erneut
+getestet und war diesmal tatsaechlich sichtbar (nicht mehr mit dem
+Hintergrund verschmolzen) - bestaetigt, dass der fruehere "Schwarz"-Kompromiss
+durch den INVON-Bug verursacht war, nicht durch eine generelle
+Panel-Schwaeche. Nutzer fand den Kontrast trotzdem noch zu schwach; auf
+`TFT_DARKGREY` (128,128,128) gewechselt - naeher am Lastenheft-Wortlaut
+"hellgrau" als das vorherige Schwarz, aber mit ausreichend Kontrast auf
+Weiss.
+
+### Zahnrad-Symbol: erst Schraubenschluessel probiert, dann verworfen
+Auf Nutzerwunsch testweise durch ein stilisiertes Schraubenschluessel-Symbol
+ersetzt (diagonaler Schaft mit zwei unterschiedlich grossen Ringkoepfen,
+angelehnt an eine vom Nutzer bereitgestellte Referenzgrafik). Bei der
+kleinen Symbolgroesse (~22px) wirkte das Ergebnis nicht ueberzeugend genug
+und wurde auf Nutzerwunsch wieder verworfen. Stattdessen ein kraeftigeres
+Zahnrad: gefuellter Ring (vorher duenne Kreislinien) mit ausgeschnittener
+Mitte (`fillCircle` in `bgColor` ueber dem massiven Ring) und Zaehnen als
+gefuellte Dreiecke statt duenner Linien - Ring-Innenradius `r-5` (nach
+Nutzer-Iteration ueber `r-4`, `r-7`) fuer eine "fleischigere" Optik.
+
+## Bildschirm "zitterte": bedingungslose Full-Redraws statt Redraw-nur-bei-Aenderung
+
+### Bug gefunden und behoben: sichtbares Flackern durch unnoetige Redraws
+Nach dem Statusleisten-Sichtbarkeits-Fix meldete der Nutzer sichtbares
+Zittern/Flackern des Displays im Normalbetrieb. Ursache: mehrere
+Zeichenfunktionen fuehrten bei jedem Aufruf bedingungslos einen vollen
+`fillRect` + Neuzeichnen aus, auch wenn sich der angezeigte Wert seit dem
+letzten Aufruf gar nicht geaendert hatte - der fillRect-dann-Text-Ablauf
+brauchte messbar lange genug (SPI-Uebertragung), um als kurzes Aufblitzen
+sichtbar zu sein:
+
+- `StatusBar::draw()` wurde alle 300ms aufgerufen (noetig fuers WLAN-Blink-
+  Symbol, siehe aeltere Notiz oben in dieser Datei), zeichnete aber bei
+  jedem Aufruf blind neu, auch wenn WLAN-Balken/Temperatur/Uhrzeit exakt
+  gleich blieben.
+- Der Hauptloop erzwang zusaetzlich alle 5s (`kPeriodicRedrawIntervalMs`)
+  einen Redraw des Inhaltsbereichs unabhaengig von der aktiven Datenquelle -
+  noetig eigentlich nur fuer die Uhrzeit-Ansicht (deren Anzeige sich ohne
+  neue Messung rein zeitgesteuert aendert), traf aber auch Graph/Ping-
+  Ansichten, die bereits ueber tatsaechliche Poll-Ereignisse redraw-getriggert
+  werden.
+- `PingView::drawAverage()`/`drawTargetList()` (Ping-Poll alle 2s) und
+  `GraphManager::drawFullScreen()` (DHT11-Poll alle 5s) zeichneten bei jedem
+  Poll neu, auch wenn der gerundete Anzeigewert unveraendert war - bei Ping
+  alle 2s am staerksten wahrnehmbar.
+
+Behoben nach demselben Muster in allen vier Stellen: letzten gezeichneten
+Zustand zwischenspeichern (gerundete Werte bzw. eine zusammengesetzte
+Signatur bei der Ping-Zielliste) und den eigentlichen Redraw nur ausfuehren,
+wenn sich etwas tatsaechlich geaendert hat. Fuer `StatusBar` bleibt die
+WLAN-Blink-Animation (`bars < 0`) als Ausnahme bestehen, die weiterhin bei
+jedem 300ms-Tick neu zeichnet. `periodicDue` im Hauptloop ist jetzt auf
+`activeSource == DataSource::Uhrzeit` beschraenkt.
+
+**Noch nicht angefasst:** `SensormeterView::draw()` hat denselben
+bedingungslosen Redraw-bei-jedem-Poll-Aufbau, aber bei einem 30s-Poll-
+Intervall (`SensormeterClient::kPollIntervalMs`) faellt das kaum auf -
+bewusst nicht ungetestet geaendert, da aktuell kein Sensormeter-Geraet zum
+Verifizieren erreichbar war. Bei Gelegenheit nachziehen, falls dort
+ebenfalls Flackern auffaellt.
+
 ## Erster echter Test im Hauptbetrieb (nach WLAN-Verbindung): Statusleisten unsichtbar
 
 ### Bug gefunden und behoben: TFT_RGB_ORDER falsch konfiguriert

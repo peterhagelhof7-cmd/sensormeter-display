@@ -5,9 +5,11 @@
 
 // Permanente Statusleisten auf den beiden langen Bildschirmkanten (siehe
 // Layout.h): oben Zahnrad + WLAN-Empfang + DHT11-Werte, unten Uhrzeit/Datum.
-// lastenheft.txt Abschnitt 4 verlangt "hellgrau" fuer die Symbolfarbe,
-// auf dem echten Panel aber praktisch nicht von Weiss zu unterscheiden
-// (Hardware-Befund) - daher Schwarz, siehe docs/entscheidungen.md.
+// lastenheft.txt Abschnitt 4 verlangt "hellgrau" fuer die Symbolfarbe;
+// TFT_LIGHTGREY war auf dem echten Panel zu kontrastarm, TFT_DARKGREY
+// gewaehlt (siehe docs/entscheidungen.md fuer die Fehlersuche - eigentliche
+// Ursache eines frueheren "unsichtbar"-Befunds war eine globale
+// Farbinvertierung, siehe DisplayManager).
 class StatusBar {
 public:
 	// Trefferbereich des Zahnrad-Symbols, fuer den Touch-Test in main.cpp
@@ -25,6 +27,22 @@ public:
 	          bool showBottomBar = true, uint16_t bgColor = TFT_WHITE);
 
 private:
-	void drawGearIcon(TFT_eSPI &tft, int16_t cx, int16_t cy, int16_t r) const;
+	void drawGearIcon(TFT_eSPI &tft, int16_t cx, int16_t cy, int16_t r, uint16_t bgColor) const;
 	void drawWifiIcon(TFT_eSPI &tft, int16_t x, int16_t y, int8_t bars) const;
+
+	// Redraw-Cache: draw() wird von main.cpp alle 300ms aufgerufen (siehe dort
+	// zur Begruendung des Intervalls), aber ein voller fillRect+Icon-Redraw
+	// bei unveraenderten Werten erzeugte sichtbares Flackern (Hardware-Befund
+	// nach dem Kontrast-Fix auf schwarze Symbole - vorher mit dem fast
+	// unsichtbaren Hellgrau nicht aufgefallen). Nur bei tatsaechlicher
+	// Aenderung oder aktivem WLAN-Blinken (bars<0) neu zeichnen.
+	bool everDrawn = false;
+	int8_t lastBars = -2;
+	bool lastSensorValid = false;
+	int lastTempRounded = 0;
+	int lastHumidityRounded = 0;
+	String lastTimeHHMM;
+	String lastDateLine;
+	bool lastShowBottomBar = true;
+	uint16_t lastBgColor = 0;
 };

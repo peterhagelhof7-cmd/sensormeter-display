@@ -5,25 +5,36 @@
 #include "Layout.h"
 
 namespace {
-// lastenheft.txt Abschnitt 4 verlangt "hellgrau" - auf dem echten Panel
-// (2,8" ST7789P3) aber praktisch nicht von Weiss zu unterscheiden
-// (Hardware-Befund, siehe docs/entscheidungen.md). Schwarz gewaehlt fuer
-// tatsaechliche Lesbarkeit statt eines technisch spec-treuen, aber
-// unsichtbaren Grautons.
-constexpr uint16_t kIconColor = TFT_BLACK;
+// TFT_LIGHTGREY (211,211,211) hatte auf Weiss noch zu wenig Kontrast, auch
+// nachdem die eigentliche Ursache (Farbinvertierung, siehe DisplayManager)
+// behoben war. TFT_DARKGREY (128,128,128) ist deutlich lesbarer und noch
+// als "grau" statt schwarz erkennbar.
+constexpr uint16_t kIconColor = TFT_DARKGREY;
 }
 
-void StatusBar::drawGearIcon(TFT_eSPI &tft, int16_t cx, int16_t cy, int16_t r) const {
-	tft.drawCircle(cx, cy, r, kIconColor);
-	tft.drawCircle(cx, cy, r - 3, kIconColor);
+void StatusBar::drawGearIcon(TFT_eSPI &tft, int16_t cx, int16_t cy, int16_t r, uint16_t bgColor) const {
+	// Gefuelltes Zahnrad statt duenner Umrisslinien (vorherige Version war
+	// bei der kleinen Symbolgroesse zu grazil/schwer erkennbar) - massiver
+	// Ring mit ausgeschnittener Mitte, Zaehne als kleine gefuellte Rechtecke.
+	tft.fillCircle(cx, cy, r, kIconColor);
+	tft.fillCircle(cx, cy, r - 5, bgColor);
+
 	constexpr int8_t kTeeth = 8;
+	constexpr int16_t kToothLen = 4;
+	constexpr int16_t kToothHalfWidth = 2;
 	for (int8_t i = 0; i < kTeeth; i++) {
 		float angle = i * (2.0f * PI / kTeeth);
-		int16_t x1 = cx + static_cast<int16_t>((r + 1) * cosf(angle));
-		int16_t y1 = cy + static_cast<int16_t>((r + 1) * sinf(angle));
-		int16_t x2 = cx + static_cast<int16_t>((r + 4) * cosf(angle));
-		int16_t y2 = cy + static_cast<int16_t>((r + 4) * sinf(angle));
-		tft.drawLine(x1, y1, x2, y2, kIconColor);
+		float cosA = cosf(angle);
+		float sinA = sinf(angle);
+		float nx = -sinA;
+		float ny = cosA;
+		int16_t baseX = cx + static_cast<int16_t>(r * cosA);
+		int16_t baseY = cy + static_cast<int16_t>(r * sinA);
+		int16_t tipX = cx + static_cast<int16_t>((r + kToothLen) * cosA);
+		int16_t tipY = cy + static_cast<int16_t>((r + kToothLen) * sinA);
+		int16_t ox = static_cast<int16_t>(nx * kToothHalfWidth);
+		int16_t oy = static_cast<int16_t>(ny * kToothHalfWidth);
+		tft.fillTriangle(baseX + ox, baseY + oy, baseX - ox, baseY - oy, tipX, tipY, kIconColor);
 	}
 }
 
@@ -55,22 +66,42 @@ void StatusBar::drawWifiIcon(TFT_eSPI &tft, int16_t x, int16_t y, int8_t bars) c
 void StatusBar::draw(DisplayManager &display, WlanManager &wlan, bool sensorValid, float tempC,
                       float humidityPct, const String &timeHHMM, const String &dateLine,
                       bool showBottomBar, uint16_t bgColor) {
+	int8_t bars = wlan.signalBars();
+	bool blinking = bars < 0; // Symbol animiert sich selbst, siehe drawWifiIcon()
+	int tempRounded = sensorValid ? static_cast<int>(lroundf(tempC)) : 0;
+	int humidityRounded = sensorValid ? static_cast<int>(lroundf(humidityPct)) : 0;
+
+	bool changed = !everDrawn || bars != lastBars || sensorValid != lastSensorValid ||
+	               tempRounded != lastTempRounded || humidityRounded != lastHumidityRounded ||
+	               timeHHMM != lastTimeHHMM || dateLine != lastDateLine ||
+	               showBottomBar != lastShowBottomBar || bgColor != lastBgColor;
+	if (!changed && !blinking) {
+		return;
+	}
+	everDrawn = true;
+	lastBars = bars;
+	lastSensorValid = sensorValid;
+	lastTempRounded = tempRounded;
+	lastHumidityRounded = humidityRounded;
+	lastTimeHHMM = timeHHMM;
+	lastDateLine = dateLine;
+	lastShowBottomBar = showBottomBar;
+	lastBgColor = bgColor;
+
 	TFT_eSPI &tft = display.raw();
 
 	// --- obere Leiste: Zahnrad, WLAN, DHT11 ---
 	tft.fillRect(0, 0, DisplayManager::kScreenWidth, Layout::kStatusBarHeight, bgColor);
 	tft.drawFastHLine(0, Layout::kStatusBarHeight - 1, DisplayManager::kScreenWidth, kIconColor);
 
-	drawGearIcon(tft, 18, Layout::kStatusBarHeight / 2, 11);
-	drawWifiIcon(tft, 44, Layout::kStatusBarHeight / 2 - 8, wlan.signalBars());
+	drawGearIcon(tft, 18, Layout::kStatusBarHeight / 2, 11, bgColor);
+	drawWifiIcon(tft, 44, Layout::kStatusBarHeight / 2 - 8, bars);
 
 	tft.setTextColor(kIconColor, bgColor);
 	tft.setTextDatum(MR_DATUM);
 	tft.setTextFont(2);
-	String dhtText = sensorValid
-	                      ? (String(static_cast<int>(lroundf(tempC))) + "C  " +
-	                         String(static_cast<int>(lroundf(humidityPct))) + "%")
-	                      : String("--C  --%");
+	String dhtText = sensorValid ? (String(tempRounded) + "C  " + String(humidityRounded) + "%")
+	                              : String("--C  --%");
 	tft.drawString(dhtText, DisplayManager::kScreenWidth - 8, Layout::kStatusBarHeight / 2);
 	tft.setTextDatum(TL_DATUM);
 

@@ -2,6 +2,18 @@
 
 void PingView::drawAverage(DisplayManager &display, const PingManager &ping, int16_t contentTop,
                             int16_t contentBottom, uint16_t bgColor) {
+	bool hasReading = ping.hasGoogleReading();
+	int latencyRounded = hasReading ? static_cast<int>(lroundf(ping.googleAverageLatencyMs())) : 0;
+	bool changed = !everDrawnAvg || hasReading != lastHasGoogleReading ||
+	               latencyRounded != lastLatencyRounded || bgColor != lastAvgBgColor;
+	if (!changed) {
+		return;
+	}
+	everDrawnAvg = true;
+	lastHasGoogleReading = hasReading;
+	lastLatencyRounded = latencyRounded;
+	lastAvgBgColor = bgColor;
+
 	TFT_eSPI &tft = display.raw();
 	int16_t h = contentBottom - contentTop;
 	tft.fillRect(0, contentTop, DisplayManager::kScreenWidth, h, bgColor);
@@ -26,6 +38,21 @@ void PingView::drawAverage(DisplayManager &display, const PingManager &ping, int
 
 void PingView::drawTargetList(DisplayManager &display, const PingManager &ping, int16_t contentTop,
                                int16_t contentBottom, uint16_t bgColor) {
+	size_t count = ping.targetCount();
+	String signature = String(count);
+	for (size_t i = 0; i < count; i++) {
+		signature += '|';
+		signature += ping.targetChecked(i) ? (ping.targetOk(i) ? 'K' : 'F') : '?';
+		signature += ping.targetIp(i);
+	}
+	bool changed = !everDrawnList || signature != lastListSignature || bgColor != lastListBgColor;
+	if (!changed) {
+		return;
+	}
+	everDrawnList = true;
+	lastListSignature = signature;
+	lastListBgColor = bgColor;
+
 	TFT_eSPI &tft = display.raw();
 	int16_t h = contentBottom - contentTop;
 	tft.fillRect(0, contentTop, DisplayManager::kScreenWidth, h, bgColor);
@@ -33,7 +60,6 @@ void PingView::drawTargetList(DisplayManager &display, const PingManager &ping, 
 	tft.setTextDatum(TL_DATUM);
 	tft.setTextFont(2);
 
-	size_t count = ping.targetCount();
 	if (count == 0) {
 		tft.setTextDatum(MC_DATUM);
 		tft.setTextFont(4);

@@ -145,7 +145,14 @@ void loop() {
 	int16_t contentBottom = showBottomBar ? Layout::kContentBottom : DisplayManager::kScreenHeight;
 
 	uint32_t now = millis();
-	bool periodicDue = (now - lastPeriodicRedrawMs >= kPeriodicRedrawIntervalMs);
+	// Nur die Uhrzeit-Ansicht braucht einen Redraw ohne neue Messung (die
+	// Anzeige aendert sich rein zeitgesteuert). Fuer die anderen Quellen
+	// erzeugte ein unbedingter 5s-Takt einen sichtbaren, unnoetigen
+	// Full-Redraw ohne Datenaenderung (Hardware-Befund: Bildschirm
+	// "zitterte" gelegentlich, siehe docs/entscheidungen.md) - dafuer reicht
+	// bereits sourceJustPolled/contentDirty.
+	bool periodicDue =
+	    activeSource == DataSource::Uhrzeit && (now - lastPeriodicRedrawMs >= kPeriodicRedrawIntervalMs);
 
 	bool sourceJustPolled = (activeSource == DataSource::Dht11 && dhtPolled) ||
 	                        (activeSource == DataSource::Sensormeter && sensormeterPolled) ||

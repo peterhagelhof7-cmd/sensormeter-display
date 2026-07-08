@@ -13,4 +13,17 @@ public:
 	                  int16_t contentBottom, uint16_t bgColor);
 	void drawTargetList(DisplayManager &display, const PingManager &ping, int16_t contentTop,
 	                     int16_t contentBottom, uint16_t bgColor);
+
+private:
+	// Redraw-Cache wie in StatusBar/GraphManager (siehe dort/docs/entscheidungen.md):
+	// PingManager pollt alle 2s, ein bedingungsloser Full-Redraw bei jedem
+	// Poll (auch ohne geaenderten Anzeigewert) fuehrte zu sichtbarem Flackern.
+	bool everDrawnAvg = false;
+	bool lastHasGoogleReading = false;
+	int lastLatencyRounded = 0;
+	uint16_t lastAvgBgColor = 0;
+
+	bool everDrawnList = false;
+	String lastListSignature;
+	uint16_t lastListBgColor = 0;
 };

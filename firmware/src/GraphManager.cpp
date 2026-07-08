@@ -146,6 +146,20 @@ void GraphManager::drawGraph(DisplayManager &display, int16_t x, int16_t y, int1
 
 void GraphManager::drawFullScreen(DisplayManager &display, float currentTempC, float currentHumidityPct,
                                    bool sensorValid, uint16_t bgColor) {
+	int tempRounded = sensorValid ? static_cast<int>(lroundf(currentTempC)) : 0;
+	int humidityRounded = sensorValid ? static_cast<int>(lroundf(currentHumidityPct)) : 0;
+	bool changed = !everDrawn || sensorValid != lastSensorValid || tempRounded != lastTempRounded ||
+	               humidityRounded != lastHumidityRounded || bgColor != lastBgColor || count != lastCount;
+	if (!changed) {
+		return;
+	}
+	everDrawn = true;
+	lastSensorValid = sensorValid;
+	lastTempRounded = tempRounded;
+	lastHumidityRounded = humidityRounded;
+	lastBgColor = bgColor;
+	lastCount = count;
+
 	TFT_eSPI &tft = display.raw();
 	tft.fillRect(0, Layout::kContentTop, DisplayManager::kScreenWidth, Layout::kContentHeight, bgColor);
 
