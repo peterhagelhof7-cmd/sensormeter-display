@@ -5,7 +5,12 @@
 #include "Layout.h"
 
 namespace {
-constexpr uint16_t kIconColor = TFT_LIGHTGREY;
+// lastenheft.txt Abschnitt 4 verlangt "hellgrau" - auf dem echten Panel
+// (2,8" ST7789P3) aber praktisch nicht von Weiss zu unterscheiden
+// (Hardware-Befund, siehe docs/entscheidungen.md). Schwarz gewaehlt fuer
+// tatsaechliche Lesbarkeit statt eines technisch spec-treuen, aber
+// unsichtbaren Grautons.
+constexpr uint16_t kIconColor = TFT_BLACK;
 }
 
 void StatusBar::drawGearIcon(TFT_eSPI &tft, int16_t cx, int16_t cy, int16_t r) const {
@@ -54,7 +59,7 @@ void StatusBar::draw(DisplayManager &display, WlanManager &wlan, bool sensorVali
 
 	// --- obere Leiste: Zahnrad, WLAN, DHT11 ---
 	tft.fillRect(0, 0, DisplayManager::kScreenWidth, Layout::kStatusBarHeight, bgColor);
-	tft.drawFastHLine(0, Layout::kStatusBarHeight - 1, DisplayManager::kScreenWidth, TFT_LIGHTGREY);
+	tft.drawFastHLine(0, Layout::kStatusBarHeight - 1, DisplayManager::kScreenWidth, kIconColor);
 
 	drawGearIcon(tft, 18, Layout::kStatusBarHeight / 2, 11);
 	drawWifiIcon(tft, 44, Layout::kStatusBarHeight / 2 - 8, wlan.signalBars());
@@ -76,7 +81,7 @@ void StatusBar::draw(DisplayManager &display, WlanManager &wlan, bool sensorVali
 	}
 	int16_t barY = Layout::kContentBottom;
 	tft.fillRect(0, barY, DisplayManager::kScreenWidth, Layout::kStatusBarHeight, bgColor);
-	tft.drawFastHLine(0, barY, DisplayManager::kScreenWidth, TFT_LIGHTGREY);
+	tft.drawFastHLine(0, barY, DisplayManager::kScreenWidth, kIconColor);
 
 	tft.setTextColor(kIconColor, bgColor);
 	tft.setTextDatum(ML_DATUM);

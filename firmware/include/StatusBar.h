@@ -5,7 +5,9 @@
 
 // Permanente Statusleisten auf den beiden langen Bildschirmkanten (siehe
 // Layout.h): oben Zahnrad + WLAN-Empfang + DHT11-Werte, unten Uhrzeit/Datum.
-// Symbolfarbe hellgrau, siehe lastenheft.txt Abschnitt 4.
+// lastenheft.txt Abschnitt 4 verlangt "hellgrau" fuer die Symbolfarbe,
+// auf dem echten Panel aber praktisch nicht von Weiss zu unterscheiden
+// (Hardware-Befund) - daher Schwarz, siehe docs/entscheidungen.md.
 class StatusBar {
 public:
 	// Trefferbereich des Zahnrad-Symbols, fuer den Touch-Test in main.cpp

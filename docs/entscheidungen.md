@@ -1,5 +1,42 @@
 # Entscheidungsprotokoll — Sensormeter Display
 
+## Erster echter Test im Hauptbetrieb (nach WLAN-Verbindung): Statusleisten unsichtbar
+
+### Bug gefunden und behoben: TFT_RGB_ORDER falsch konfiguriert
+Nach erfolgreicher WLAN-Verbindung (erster Durchlauf des Hauptloops auf
+echter Hardware) war die obere UND untere Statusleiste komplett
+unsichtbar/schwarz, obwohl `StatusBar::draw()` nachweislich korrekt und mit
+plausiblen Werten aufgerufen wurde (per Serial-Debug verifiziert). Test mit
+knallrotem statt hellgrauem Symbol zur Eingrenzung: `TFT_RED` erschien auf
+dem echten Panel als **Türkis**, nicht Rot - klassischer Hinweis auf
+vertauschte Farbkanal-Reihenfolge. `platformio.ini` hatte
+`TFT_RGB_ORDER=TFT_BGR` gesetzt, das Panel ist aber tatsaechlich RGB-nativ.
+Behoben durch Aendern auf `TFT_RGB_ORDER=TFT_RGB`.
+
+**Wichtig:** Dieser Fehler war nicht auf die Statusleiste beschraenkt,
+sondern haette jede explizite Farbe mit ungleichen R/G/B-Anteilen falsch
+dargestellt - u. a. den roten Alarm-Hintergrund bei Ping-Ausfall
+(lastenheft.txt Abschnitt 9) sowie die Graph-Farben (Temperatur rot,
+Luftfeuchte blau). Reine Grautoene (R≈G≈B) sind von diesem Fehler nicht
+sichtbar betroffen, weshalb er beim allgemeinen Boot-Bildschirm-Test zuvor
+nicht auffiel.
+
+### Symbolfarbe von hellgrau auf schwarz geaendert (Abweichung vom Lastenheft)
+`lastenheft.txt` Abschnitt 4 verlangt "hellgrau" fuer die Statusleisten-
+Symbole. Auch nach dem RGB/BGR-Fix blieb die Original-`TFT_LIGHTGREY`-Farbe
+auf dem echten 2,8"-ST7789P3-Panel praktisch nicht von Weiss unterscheidbar
+(Hardware-Befund, vermutlich begrenzte Graustufen-Differenzierung dieses
+guenstigen Panels). Auf schwarz umgestellt fuer tatsaechliche Lesbarkeit -
+bewusste Abweichung vom woertlichen Lastenheft-Wortlaut zugunsten der
+dahinterliegenden Absicht (eine erkennbare Statusleiste). Interessanter
+Nebenbefund: `TFT_BLACK` erscheint auf diesem Panel selbst als **weiss**
+(vermutlich Interaktion mit der Panel-eigenen Inversionseinstellung) - das
+Ergebnis ist trotzdem gut lesbar (weisse Symbole, siehe Test durch Nutzer),
+daher nicht weiter verfolgt. Graph-Linienfarben (rot/blau) und der rote
+Alarm-Hintergrund sind nach dem RGB/BGR-Fix noch nicht am echten Geraet
+verifiziert (noch nicht genug DHT11-Messwerte fuer den Graph vorhanden) -
+bei Gelegenheit nachpruefen.
+
 ## Erster echter Touch-Test: X/Y-Kanal vertauscht
 
 ### Bug gefunden und behoben: Touch-Controller liefert X/Y vertauscht
