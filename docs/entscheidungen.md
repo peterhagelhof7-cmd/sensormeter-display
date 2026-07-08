@@ -1,5 +1,37 @@
 # Entscheidungsprotokoll — Sensormeter Display
 
+## P1 — WLAN-Ersteinrichtung
+
+### Bildschirmtastatur: gewichtsbasiertes Zeilenlayout, keine PSK-Maskierung
+Die Tastatur (`WifiOnboarding.cpp`) berechnet Tastenbreiten aus relativen
+Gewichten je Zeile (z. B. Leertaste = 4x Normalbreite) statt fester
+Pixelkoordinaten — vermeidet manuelle Off-by-one-Fehler bei Anpassungen.
+Zwei Seiten: Buchstaben (mit Umschalt/CAPS) und Sonderzeichen (SYM/ABC zum
+Umschalten), Zeichensatz auf gaengige WPA2-taugliche Sonderzeichen begrenzt.
+
+Die eingegebene PSK wird im Klartext angezeigt, nicht maskiert: Auf einem
+Geraet ohne physische Tastatur ist die Kontrolle der Eingabe wichtiger als
+Sichtschutz, zumal es sich um ein lokales Konfigurationsgeraet handelt.
+
+### Nur ein gespeichertes WLAN
+Es wird genau ein Netz (SSID+PSK) in NVS gespeichert, kein Multi-WLAN mit
+Prioritaetsliste. Deckt sich mit der fruehreren Entscheidung, die
+Mehr-Netzwerk-/Timeout-/Retry-Details der Vorgaenger-Lastenhefte bewusst
+nicht zu uebernehmen (siehe `lastenheft.txt` Abschnitt 11). "WLAN neu
+waehlen" in den Systemeinstellungen ueberschreibt die gespeicherten Daten.
+
+### Netzliste ohne Scroll-Funktion
+`WlanManager::scan()` liefert maximal 6 Netze (nach Signalstaerke sortiert,
+SSID-Duplikate zusammengefasst) — mehr passt ohnehin nicht auf den 240px
+hohen Bildschirm ohne Scrollen. Weitere Netze werden nicht angezeigt; bei
+Bedarf spaeter durch Scroll-Geste erweiterbar.
+
+### Fehlgeschlagene Verbindung: zurueck zur gecachten Liste
+Nach einem gescheiterten Verbindungsversuch wird die zuvor gescannte
+Netzliste erneut angezeigt statt automatisch neu zu scannen (WLAN-Scan
+dauert mehrere Sekunden) — ein manueller "Aktualisieren"-Tap scannt bei
+Bedarf neu.
+
 ## P0 — Display- und Touch-Grundgerüst
 
 ### TFT-Pinbelegung nicht im Datenblatt enthalten

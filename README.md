@@ -32,7 +32,7 @@ Hardware-Alternative (ESP32-S3/Heemol) wurden bewusst **nicht** übernommen.
 ## Firmware
 
 `firmware/` ist ein PlatformIO-Projekt (Board `esp32dev`, Framework Arduino).
-Aktueller Stand: **P0 — Display- und Touch-Grundgerüst** (siehe
+Aktueller Stand: **P1 — WLAN-Ersteinrichtung** (siehe
 [docs/implementierungsplan.html](docs/implementierungsplan.html)).
 
 ```
@@ -42,12 +42,14 @@ pio run --target upload   # flashen
 pio device monitor   # seriellen Log ansehen (115200 Baud)
 ```
 
-Enthalten (P0):
+Enthalten (P0–P1):
 - TFT_eSPI-Ansteuerung des ST7789P3 (Querbetrieb, 320x240)
 - Touch-Bit-Bang-Treiber (`TouchManager`) inkl. 2-Punkt-Kalibrierung,
   Kalibrierdaten in NVS (Preferences)
-- Boot-Ablauf: Display init → Touch init → Kalibrierung (falls nötig) →
-  Touch-Testanzeige
+- WLAN-Ersteinrichtung (`WlanManager`, `WifiOnboarding`): Scan mit
+  "Aktualisieren"-Button, Netzliste mit Empfangsbalken, Bildschirmtastatur
+  (Buchstaben + Sonderzeichen) zur PSK-Eingabe, Speicherung in NVS,
+  automatischer Verbindungsaufbau bei jedem weiteren Start
 
 Noch nicht verifiziert: reale Hardware (TFT-Pinbelegung über ein passendes
 Referenzdesign erschlossen, nicht am eigenen Board nachgemessen — siehe

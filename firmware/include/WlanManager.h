@@ -1,0 +1,43 @@
+#pragma once
+
+#include <Arduino.h>
+#include <WiFi.h>
+#include <Preferences.h>
+#include <vector>
+
+// Verwaltet WLAN-Scan, -Verbindung und die Zugangsdaten im Flash (NVS).
+// Genau ein gespeichertes Netz (SSID+PSK) - Lastenheft sieht kein
+// Multi-WLAN-Fallback vor, nur "WLAN erneut auswaehlen" in den
+// Systemeinstellungen (ersetzt die gespeicherten Zugangsdaten).
+class WlanManager {
+public:
+	struct NetworkInfo {
+		String ssid;
+		int32_t rssi;
+		bool secured;
+	};
+
+	void begin();
+
+	// Scannt und liefert bis zu maxResults Netze, nach Signalstaerke
+	// sortiert, Duplikate (mehrere APs derselben SSID) zusammengefasst.
+	std::vector<NetworkInfo> scan(uint8_t maxResults = 6);
+
+	bool hasCredentials();
+	bool loadCredentials(String &ssid, String &psk);
+	void saveCredentials(const String &ssid, const String &psk);
+
+	// Verbindet mit den uebergebenen Zugangsdaten, blockierend bis
+	// verbunden oder Timeout. Speichert bei Erfolg NICHT automatisch
+	// (das entscheidet der Aufrufer, siehe WifiOnboarding).
+	bool connect(const String &ssid, const String &psk, uint32_t timeoutMs = 15000);
+
+	// Laedt gespeicherte Zugangsdaten und verbindet damit.
+	bool autoConnect(uint32_t timeoutMs = 15000);
+
+	bool isConnected() const { return WiFi.status() == WL_CONNECTED; }
+	int8_t signalBars() const; // 0-3, fuer das Statusleisten-Symbol
+
+private:
+	Preferences prefs;
+};
