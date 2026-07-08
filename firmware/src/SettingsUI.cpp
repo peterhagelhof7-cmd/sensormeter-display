@@ -3,6 +3,7 @@
 #include "UiHelpers.h"
 #include "DataSource.h"
 #include "NumericKeypad.h"
+#include "SnakeGame.h"
 
 using UiHelpers::hitRect;
 using UiHelpers::waitForTapEvent;
@@ -180,10 +181,9 @@ bool runStaticConfig(DisplayManager &display, TouchManager &touch, SettingsManag
 	}
 }
 
-void runSnakePlaceholder(DisplayManager &display, TouchManager &touch) {
-	display.drawBootScreen("Snake", "Noch nicht implementiert (folgt in P6)");
-	int16_t x, y;
-	waitForTapEvent(touch, x, y);
+void runSnake(DisplayManager &display, TouchManager &touch) {
+	SnakeGame snake;
+	snake.run(display, touch);
 }
 
 constexpr int16_t kSysButtonX = kScreenW / 2 - 110;
@@ -426,7 +426,7 @@ void SettingsUI::run(DisplayManager &display, TouchManager &touch, WlanManager &
 				exitSettings = runStaticConfig(display, touch, settings);
 				break;
 			case 2: // Snake
-				runSnakePlaceholder(display, touch);
+				runSnake(display, touch);
 				break;
 			case 3: // Systemeinstellungen
 				runSystemSettings(display, touch, wlan, settings, backlight, onboarding);

@@ -1,5 +1,43 @@
 # Entscheidungsprotokoll — Sensormeter Display
 
+## P6 — Snake (optional)
+
+### Touch-Drittel-Ueberschneidung: vertikale Zonen haben Prioritaet
+`lastenheft.txt` Abschnitt 6.3 beschreibt vier Touch-Zonen (oberes/unteres/
+linkes/rechtes Drittel), legt aber nicht fest, wie die Ecken aufgeloest
+werden, wo sich z. B. "oberes Drittel" und "linkes Drittel" ueberlappen.
+`SnakeGame::zoneForTouch()` prueft zuerst oben/unten, dann links/rechts -
+ein Tipp in der oberen linken Ecke zaehlt also als "hoch". Einfachste,
+deterministische Aufloesung ohne zusaetzliche UI-Elemente.
+
+### Raster 16px-Zellen, 20x13 Felder, Kopfzeile fuer Punktestand
+Bildschirm 320x240, 24px oben fuer die Punkteanzeige reserviert, Rest
+(216px) in 16px-Zellen aufgeteilt -> 13 Reihen (208px genutzt, 8px Rand
+unten). 16px-Zellen sind auf dem 2,8"-Display gut antippbar/erkennbar und
+ergeben ein handhabbares Feld (260 Zellen max. Schlangenlaenge).
+
+### Nicht-blockierender Spiel-Loop (Touch-Poll + fester Tick nebeneinander)
+Anders als alle bisherigen Screens (Onboarding, Einstellungen, Tastenfeld),
+die auf einen vollstaendigen Tipp-Zyklus warten (`waitForTapEvent`), braucht
+Snake einen laufenden Takt unabhaengig vom Touch. `SnakeGame::run()` fragt
+Touch alle ~15ms ab (aktualisiert nur die gewuenschte Richtung) und bewegt
+die Schlange unabhaengig davon alle 200ms (`kTickIntervalMs`) - Muster
+uebernommen aus dem bereits etablierten Hauptloop (`main.cpp`), nicht neu
+erfunden.
+
+### Highscore in eigenem NVS-Namespace statt ueber SettingsManager
+`SnakeGame` verwaltet seinen Highscore direkt ueber einen eigenen
+`Preferences`-Namespace ("snake") statt den Umweg ueber `SettingsManager`
+zu nehmen - konsistent damit, wie auch `TouchManager` (Kalibrierung) und
+`WlanManager` (Zugangsdaten) jeweils ihre eigene NVS-Namespace verwalten,
+statt alle Einstellungen zentral zu buendeln.
+
+### Ressourcenverbrauch geringer als geschaetzt
+Vor der Umsetzung geschaetzt: +10-20 KB Flash. Tatsaechlich: **+2,4 KB
+Flash, +136 Byte RAM** (896.165/1.310.720 Flash, 46.840/327.680 RAM) - da
+Snake keine neue Bibliothek braucht und ausschliesslich bereits gelinkte
+Bausteine (TFT_eSPI-Primitiven, Preferences, `random()`) wiederverwendet.
+
 ## P7/P8 — Sensormeter-Anbindung (SNMP), Ping-Überwachung
 
 ### OID-Kodierung im Sensormeter-Projekt verifiziert statt angenommen
