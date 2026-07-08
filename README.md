@@ -117,7 +117,10 @@ Die Datenquelle "Sensormeter" fragt das separate
 [Sensormeter](https://github.com/peterhagelhof7-cmd/sensormeter)-Projekt
 (WT32-ETH01) per SNMP v1 ab. Die OID-Struktur ist dort bereits vollständig
 dokumentiert und implementiert (`.1.3.6.1.4.1.99999.x`) und wird 1:1
-übernommen (siehe `docs/lastenheft.txt` Abschnitt 7.3).
+übernommen (siehe `docs/lastenheft.txt` Abschnitt 7.3). Dieselbe OID-Basis
+gilt auch für [Sensormeter WLAN](https://github.com/peterhagelhof7-cmd/sensormeter-wlan)
+(günstigere WLAN-only-Variante, noch in der Doku-Phase) - beide
+Produktlinien lassen sich also ohne Codeänderung hier abfragen.
 
 ## Über dieses Projekt
 
