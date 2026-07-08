@@ -106,10 +106,13 @@ Noch nicht verifiziert: reale Hardware (TFT-Pinbelegung über ein passendes
 Referenzdesign erschlossen, nicht am eigenen Board nachgemessen — siehe
 `docs/entscheidungen.md`).
 
-**Auf einem anderen/frischen Windows-PC**: [`scripts/flash-sensormeter-display.ps1`](scripts/flash-sensormeter-display.ps1)
-(oder `.cmd` zum Doppelklicken) richtet Python/Git/PlatformIO automatisch
-ein, klont dieses Repo falls nötig und baut/flasht das per USB angeschlossene
-Board in einem Rutsch. Details: [`scripts/README.md`](scripts/README.md).
+**Auf einem anderen/frischen Windows-PC**: [`scripts/flash.ps1`](scripts/flash.ps1)
+(oder `.cmd` zum Doppelklicken) fragt zuerst, welches der drei
+Sensormeter-Projekte geflasht werden soll (Sensormeter / Sensormeter WLAN /
+Sensormeter Display – dasselbe Skript liegt identisch in allen drei Repos),
+richtet danach Python/Git/PlatformIO automatisch ein, klont das gewählte
+Repo falls nötig und baut/flasht das per USB angeschlossene Board in einem
+Rutsch. Details: [`scripts/README.md`](scripts/README.md).
 
 ## Zusammenhang mit dem Sensormeter-Projekt
 

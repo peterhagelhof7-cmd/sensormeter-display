@@ -1,20 +1,32 @@
 <#
 .SYNOPSIS
-  Installiert alle Abhaengigkeiten und flasht die Sensormeter-Display-
-  Firmware (HW-458B) auf einem beliebigen Windows-PC.
+  Installiert alle Abhaengigkeiten und flasht eines der drei Sensormeter-
+  Firmware-Projekte (Sensormeter / Sensormeter WLAN / Sensormeter Display)
+  auf einem beliebigen Windows-PC.
 
 .DESCRIPTION
+  Fragt zuerst interaktiv (oder per -Project), welches der drei
+  Schwesterprojekte geflasht werden soll:
+    1) Sensormeter        (WT32-ETH01, Ethernet + bis zu 2 Sensoren)
+    2) Sensormeter WLAN    (generisches ESP32-WROOM-32-DevKit, WLAN-only)
+    3) Sensormeter Display (ESP32-Touchdisplay, SNMP-Client)
+
+  Anschliessend identischer Ablauf fuer alle drei:
   - Installiert Python + PlatformIO, falls nicht vorhanden (ueber winget/pip)
   - Installiert Git, falls nicht vorhanden (ueber winget)
-  - Klont https://github.com/peterhagelhof7-cmd/sensormeter-display, falls
-    unter -RepoPath noch kein Checkout liegt (bei vorhandenem, sauberem
-    Checkout wird stattdessen "git pull" versucht)
+  - Klont das gewaehlte Repository, falls unter -RepoPath noch kein
+    Checkout liegt (bei vorhandenem, sauberem Checkout wird stattdessen
+    "git pull" versucht)
+  - Legt firmware/include/config.h aus der Vorlage an, falls das gewaehlte
+    Projekt eine braucht und sie noch fehlt (wird nie ueberschrieben)
   - Baut die Firmware (pio run) zur Kontrolle
   - Flasht sie auf das per USB angeschlossene Board (pio run --target upload)
 
-  Anders als beim Sensormeter-Projekt gibt es hier keine config.h - alle
-  Einstellungen (WLAN, Betriebsmodus, Sensormeter-Ziel, Ping-Ziele) werden
-  am Geraet selbst per Touch eingerichtet und in NVS gespeichert.
+  Dieses Skript liegt identisch in allen drei Repos (scripts/flash.ps1) -
+  unabhaengig davon, welches der drei Projekte gerade lokal ausgecheckt ist,
+  laesst sich darueber jedes der drei flashen (die jeweils anderen beiden
+  werden bei Bedarf automatisch in einen Unterordner neben dem Skript
+  geklont).
 
   Abhaengigkeits-Erkennung ist bewusst "funktional" (ruft z.B. "python
   --version" auf und prueft die Ausgabe), nicht nur eine PATH-Pruefung:
@@ -26,9 +38,14 @@
   (winget liefert z.B. bei "bereits installiert, kein Update verfuegbar"
   einen Nicht-Null-Exitcode, obwohl das kein Fehler ist).
 
+.PARAMETER Project
+  "sensormeter", "wlan" oder "display". Wird weggelassen, fragt das Skript
+  interaktiv nach (Eingabe von 1/2/3 oder dem Projektnamen).
+
 .PARAMETER RepoPath
-  Zielordner fuer den Checkout, falls das Repo noch nicht vorhanden ist.
-  Default: .\sensormeter-display neben diesem Skript.
+  Zielordner fuer den Checkout, falls das gewaehlte Repo dort noch nicht
+  vorhanden ist. Default: ein projektspezifischer Ordnername neben diesem
+  Skript (z.B. .\sensormeter-wlan).
 
 .PARAMETER Port
   Serieller Port des Boards (z.B. COM5), falls die automatische Erkennung
@@ -39,29 +56,85 @@
   ohne dass ein Board angeschlossen ist).
 
 .EXAMPLE
-  .\flash-sensormeter-display.ps1
+  .\flash.ps1
 
 .EXAMPLE
-  .\flash-sensormeter-display.ps1 -Port COM5
+  .\flash.ps1 -Project wlan -Port COM5
 
 .EXAMPLE
-  .\flash-sensormeter-display.ps1 -RepoPath C:\Projekte\sensormeter-display -SkipUpload
+  .\flash.ps1 -Project display -RepoPath C:\Projekte\sensormeter-display -SkipUpload
 #>
 
 [CmdletBinding()]
 param(
-  [string]$RepoPath = (Join-Path $PSScriptRoot "sensormeter-display"),
+  [ValidateSet("sensormeter", "wlan", "display")]
+  [string]$Project,
+  [string]$RepoPath,
   [string]$Port,
   [switch]$SkipUpload
 )
 
 $ErrorActionPreference = "Stop"
-$RepoUrl = "https://github.com/peterhagelhof7-cmd/sensormeter-display.git"
+
+$Projects = @{
+  "sensormeter" = @{
+    DisplayName = "Sensormeter (WT32-ETH01, Ethernet + bis zu 2 Sensoren)"
+    RepoUrl     = "https://github.com/peterhagelhof7-cmd/sensormeter.git"
+    FolderName  = "sensormeter"
+    HasConfigH  = $true
+    FlashNote   = "Board muss am USB-Seriell-Adapter (Debug-Burning-Schnittstelle, NICHT am 20-Pin-Hauptheader!) angeschlossen sein und sich im Boot-/Download-Modus befinden - siehe docs/flash-vorbereitung.pdf."
+    SuccessNote = "Seriellen Monitor ansehen: pio device monitor (115200 Baud)."
+  }
+  "wlan" = @{
+    DisplayName = "Sensormeter WLAN (generisches ESP32-WROOM-32-DevKit, WLAN-only)"
+    RepoUrl     = "https://github.com/peterhagelhof7-cmd/sensormeter-wlan.git"
+    FolderName  = "sensormeter-wlan"
+    HasConfigH  = $true
+    FlashNote   = "Board per USB-C-Kabel anschliessen - ggf. CP2102-/CH340-Treiber installieren."
+    SuccessNote = "Beim ersten Start: WLAN ueber die Weboberflaeche einrichten - ohne gespeicherte Zugangsdaten versucht das Geraet nach 5 Minuten, dem Netz 'installer'/'installer' beizutreten (siehe docs/admin-guide.html Abschnitt 2.2)."
+  }
+  "display" = @{
+    DisplayName = "Sensormeter Display (ESP32-Touchdisplay, HW-458B)"
+    RepoUrl     = "https://github.com/peterhagelhof7-cmd/sensormeter-display.git"
+    FolderName  = "sensormeter-display"
+    HasConfigH  = $false
+    FlashNote   = "Board per USB-Kabel anschliessen - ggf. CH340-Treiber installieren."
+    SuccessNote = "Beim ersten Start: Touch-Kalibrierung durchfuehren, dann WLAN einrichten (siehe README.md)."
+  }
+}
 
 function Write-Step {
   param([string]$Text)
   Write-Host ""
   Write-Host "==> $Text" -ForegroundColor Cyan
+}
+
+# ------------------------------------------------------------------
+if (-not $Project) {
+  Write-Host "Welches Projekt soll geflasht werden?"
+  Write-Host "  1) $($Projects['sensormeter'].DisplayName)"
+  Write-Host "  2) $($Projects['wlan'].DisplayName)"
+  Write-Host "  3) $($Projects['display'].DisplayName)"
+  do {
+    $choice = Read-Host "Auswahl [1-3]"
+    $Project = switch ($choice) {
+      "1" { "sensormeter" }
+      "2" { "wlan" }
+      "3" { "display" }
+      "sensormeter" { "sensormeter" }
+      "wlan" { "wlan" }
+      "display" { "display" }
+      default { $null }
+    }
+    if (-not $Project) { Write-Host "Ungueltige Eingabe - bitte 1, 2, 3 oder den Projektnamen eingeben." -ForegroundColor Yellow }
+  } while (-not $Project)
+}
+
+$Selected = $Projects[$Project]
+Write-Step "Projekt: $($Selected.DisplayName)"
+
+if (-not $RepoPath) {
+  $RepoPath = Join-Path $PSScriptRoot $Selected.FolderName
 }
 
 function Update-SessionPath {
@@ -141,7 +214,7 @@ if (Test-Path (Join-Path $firmwarePath "platformio.ini")) {
   }
 } else {
   Write-Step "Klone Repository nach $RepoPath ..."
-  git clone $RepoUrl $RepoPath
+  git clone $Selected.RepoUrl $RepoPath
   if ($LASTEXITCODE -ne 0) {
     throw "git clone fehlgeschlagen (Exitcode $LASTEXITCODE)"
   }
@@ -149,6 +222,20 @@ if (Test-Path (Join-Path $firmwarePath "platformio.ini")) {
 
 if (-not (Test-Path (Join-Path $firmwarePath "platformio.ini"))) {
   throw "firmware/platformio.ini wurde auch nach dem Checkout nicht gefunden - stimmt -RepoPath ($RepoPath)?"
+}
+
+# ------------------------------------------------------------------
+if ($Selected.HasConfigH) {
+  Write-Step "Pruefe config.h..."
+  $configExample = Join-Path $firmwarePath "include\config.h.example"
+  $configReal = Join-Path $firmwarePath "include\config.h"
+
+  if (-not (Test-Path $configReal)) {
+    Copy-Item $configExample $configReal
+    Write-Host "include/config.h aus der Vorlage angelegt."
+  } else {
+    Write-Host "config.h existiert bereits - wird nicht ueberschrieben."
+  }
 }
 
 # ------------------------------------------------------------------
@@ -176,9 +263,7 @@ if ($ports.Count -eq 0) {
 }
 
 Write-Host ""
-Write-Host "Hinweis: Das Board per USB-C oder USB-Micro anschliessen (siehe" -ForegroundColor Yellow
-Write-Host "Datenblatt CBAA0055-008_DE.pdf) - ggf. muss der CH340-Treiber" -ForegroundColor Yellow
-Write-Host "installiert sein, damit Windows den USB-Seriell-Adapter erkennt." -ForegroundColor Yellow
+Write-Host "Hinweis: $($Selected.FlashNote)" -ForegroundColor Yellow
 
 Write-Step "Flashe Firmware (pio run --target upload)..."
 if ($Port) {
@@ -190,13 +275,12 @@ if ($Port) {
 if ($LASTEXITCODE -ne 0) {
   Write-Host ""
   Write-Host "Upload fehlgeschlagen. Haeufige Ursachen:" -ForegroundColor Red
-  Write-Host "  - CH340-Treiber fehlt (siehe Geraete-Manager, Datenblatt-Abschnitt 'Gebrauchsanweisung')"
   Write-Host "  - Falscher COM-Port (siehe Liste oben, ggf. mit -Port COM<n> erneut versuchen)"
-  Write-Host "  - Board nicht angeschlossen oder in einem falschen Modus"
+  Write-Host "  - CH340-/CP2102-USB-Treiber fehlt (Geraete-Manager pruefen)"
+  Write-Host "  - Board nicht angeschlossen oder nicht im Bootloader-/Download-Modus"
   throw "pio run --target upload fehlgeschlagen (Exitcode $LASTEXITCODE)"
 }
 
 Write-Host ""
 Write-Host "Fertig! Firmware erfolgreich geflasht." -ForegroundColor Green
-Write-Host "Beim ersten Start: Touch-Kalibrierung durchfuehren, dann WLAN einrichten (siehe README.md)."
-Write-Host "Seriellen Monitor ansehen: pio device monitor  (im Ordner $firmwarePath, 115200 Baud)"
+Write-Host $Selected.SuccessNote

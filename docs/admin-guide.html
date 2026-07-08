@@ -189,18 +189,22 @@ Nach der Installation im Geräte-Manager unter „Anschlüsse (COM &amp; LPT)“
 prüfen, ob ein neuer Port (z. B. <span class="code">COM5</span>) erscheint.</p>
 
 <h2>1.3 PowerShell-Skript ausführen</h2>
-<p>Das Skript <span class="code">scripts/flash-sensormeter-display.ps1</span>
-übernimmt die komplette Einrichtung: es installiert fehlende Werkzeuge
-(Python, Git, PlatformIO), holt den Quellcode und baut/flasht die Firmware —
-ganz ohne manuelle Vorbereitung.</p>
+<p>Das Skript <span class="code">scripts/flash.ps1</span> übernimmt die
+komplette Einrichtung: es fragt zuerst, welches der drei
+Sensormeter-Projekte geflasht werden soll (dasselbe Skript liegt identisch
+in allen drei Repos), installiert dann fehlende Werkzeuge (Python, Git,
+PlatformIO), holt den Quellcode und baut/flasht die Firmware — ganz ohne
+manuelle Vorbereitung.</p>
 <h3>Vorgehen</h3>
 <ol>
   <li>PowerShell öffnen (Start-Menü → „PowerShell“ eintippen)</li>
   <li>In das gewünschte Zielverzeichnis wechseln oder das Skript direkt aus
       einem bereits vorhandenen Checkout heraus starten</li>
-  <li>Skript ausführen:</li>
+  <li>Skript ausführen und bei der Projektabfrage <b>3</b> (Sensormeter
+      Display) wählen, oder direkt mit <span class="code">-Project
+      display</span> aufrufen:</li>
 </ol>
-<pre class="code-block">.\flash-sensormeter-display.ps1</pre>
+<pre class="code-block">.\flash.ps1 -Project display</pre>
 <p>Das Skript prüft nacheinander, ob Python, Git und PlatformIO vorhanden und
 tatsächlich funktionsfähig sind (nicht nur, ob ein Befehl mit diesem Namen
 existiert — Windows legt z. B. einen „python“-Store-Alias an, der keine
@@ -212,12 +216,13 @@ die Firmware gebaut.</p>
 <h3>Nützliche Parameter</h3>
 <table>
   <tr><th>Parameter</th><th>Wirkung</th></tr>
+  <tr><td><span class="code">-Project display</span></td><td>Projekt direkt angeben, ohne die interaktive Abfrage (alternativ <span class="code">sensormeter</span> oder <span class="code">wlan</span>)</td></tr>
   <tr><td><span class="code">-RepoPath &lt;Pfad&gt;</span></td><td>Zielordner für den Checkout (Default: Ordner „sensormeter-display“ neben dem Skript)</td></tr>
   <tr><td><span class="code">-Port COM5</span></td><td>Seriellen Port fest vorgeben, falls die automatische Erkennung fehlschlägt oder mehrere Boards angeschlossen sind</td></tr>
   <tr><td><span class="code">-SkipUpload</span></td><td>Nur bauen, nicht flashen — z. B. um vorab zu prüfen, ob alles kompiliert, ohne dass ein Board angeschlossen sein muss</td></tr>
 </table>
-<pre class="code-block">.\flash-sensormeter-display.ps1 -Port COM5
-.\flash-sensormeter-display.ps1 -RepoPath C:\Projekte\sensormeter-display -SkipUpload</pre>
+<pre class="code-block">.\flash.ps1 -Project display -Port COM5
+.\flash.ps1 -Project display -RepoPath C:\Projekte\sensormeter-display -SkipUpload</pre>
 
 <h2>1.4 Flashen</h2>
 <p>Ohne <span class="code">-SkipUpload</span> schließt das Skript direkt mit
