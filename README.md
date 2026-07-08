@@ -15,6 +15,9 @@ Touch, keine Cloud-Anbindung.
 | [docs/pflichtenheft.txt](docs/pflichtenheft.txt) | Technische Umsetzung: Softwaremodule, Datenspeicherung, Startup-Flow, Fehlerbehandlung |
 | [docs/implementierungsplan.html](docs/implementierungsplan.html) | Visueller Implementierungsplan P0–P8 (lokal im Browser öffnen) |
 | [docs/entscheidungen.md](docs/entscheidungen.md) | Entscheidungsprotokoll: Pinbelegung, Touch-Ansteuerung, Schriftwahl |
+| [docs/stueckliste.md](docs/stueckliste.md) | Bauteile pro Gerät + Werkzeug |
+| [docs/ZABBIX.md](docs/ZABBIX.md) | Zabbix-Integration (agentenlose ICMP-Erreichbarkeitsüberwachung) |
+| [docs/zabbix-template-sensormeter-display.yaml](docs/zabbix-template-sensormeter-display.yaml) | Fertiges Zabbix-Template |
 
 `docs/lastenheft.txt` ist die strukturierte Ausarbeitung der ursprünglichen
 `Beschreibung.txt` (führendes Anforderungsdokument, liegt außerhalb dieses
@@ -79,6 +82,11 @@ Enthalten (P0–P5, P7–P8):
 Noch nicht verifiziert: reale Hardware (TFT-Pinbelegung über ein passendes
 Referenzdesign erschlossen, nicht am eigenen Board nachgemessen — siehe
 `docs/entscheidungen.md`).
+
+**Auf einem anderen/frischen Windows-PC**: [`scripts/flash-sensormeter-display.ps1`](scripts/flash-sensormeter-display.ps1)
+(oder `.cmd` zum Doppelklicken) richtet Python/Git/PlatformIO automatisch
+ein, klont dieses Repo falls nötig und baut/flasht das per USB angeschlossene
+Board in einem Rutsch. Details: [`scripts/README.md`](scripts/README.md).
 
 ## Zusammenhang mit dem Sensormeter-Projekt
 
