@@ -9,15 +9,20 @@ Gerät per Touch, keine Cloud-Anbindung. Zusätzlich ein schlanker
 Einstellungs-Webserver (Systemname, Betriebsmodus, Ping-Ziele,
 Sensormeter-Ziel) inkl. lokalem OTA-Update per `.bin`-Upload.
 
+[**One-Pager (PDF)**](docs/sensormeter-display-onepager.pdf) — kompakte Projektübersicht auf einer Seite.
+
 ## Dokumentation
 
 | Datei | Inhalt |
 |---|---|
-| [docs/lastenheft.txt](docs/lastenheft.txt) | Fachliche Anforderungen: Hardware, GUI, Betriebsarten, Datenquellen, Fehlerbehandlung |
-| [docs/pflichtenheft.txt](docs/pflichtenheft.txt) | Technische Umsetzung: Softwaremodule, Datenspeicherung, Startup-Flow, Fehlerbehandlung |
+| [docs/sensormeter-display-onepager.pdf](docs/sensormeter-display-onepager.pdf) | One-Pager: Projektübersicht, Architektur, Kennzahlen auf einer Seite |
+| [docs/lastenheft.txt](docs/lastenheft.txt) | Fachliche Anforderungen: Hardware, GUI, Betriebsarten, Datenquellen, Fehlerbehandlung, Webserver-Nachtrag |
+| [docs/pflichtenheft.txt](docs/pflichtenheft.txt) | Technische Umsetzung: alle Softwaremodule, NVS-/LittleFS-Datenspeicherung, Startup-Flow, Fehlerbehandlung, Nebenläufigkeit |
 | [docs/implementierungsplan.html](docs/implementierungsplan.html) | Visueller Implementierungsplan P0–P8 (lokal im Browser öffnen) |
-| [docs/entscheidungen.md](docs/entscheidungen.md) | Entscheidungsprotokoll: Pinbelegung, Touch-Ansteuerung, Schriftwahl |
+| [docs/entscheidungen.md](docs/entscheidungen.md) | Entscheidungsprotokoll: Pinbelegung, Touch-Ansteuerung, Mutex-Fix, Partitionstabelle |
 | [docs/stueckliste.md](docs/stueckliste.md) | Bauteile pro Gerät + Werkzeug |
+| [docs/systemlast.md](docs/systemlast.md) | Flash/RAM je Phase (gemessen), Blockierzeit-Abschätzung, identifiziertes Ping-Timeout-Risiko |
+| [docs/stromversorgung.md](docs/stromversorgung.md) | Strombudget pro Komponente + Netzteilempfehlung |
 | [docs/ZABBIX.md](docs/ZABBIX.md) | Zabbix-Integration (agentenlose ICMP-Erreichbarkeitsüberwachung) |
 | [docs/zabbix-template-sensormeter-display.yaml](docs/zabbix-template-sensormeter-display.yaml) | Fertiges Zabbix-Template |
 
