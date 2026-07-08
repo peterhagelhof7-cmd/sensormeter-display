@@ -57,7 +57,7 @@ constexpr uint32_t kPeriodicRedrawIntervalMs = 5000;
 void setup() {
 	Serial.begin(115200);
 	delay(200);
-	Serial.println("Sensormeter Display - Boot (P7/P8)");
+	Serial.println("Sensormeter Display - Boot");
 
 	display.begin();
 	display.drawBootScreen("Sensormeter Display", "P7/P8: Sensormeter + Ping");
