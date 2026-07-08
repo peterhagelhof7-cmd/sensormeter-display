@@ -1,5 +1,11 @@
 # Sensormeter Display (HW-458B)
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/projektfamilie-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/projektfamilie-light.png">
+  <img alt="Sensormeter Projektfamilie: Sensormeter (LAN), Sensormeter WLAN (WLAN) und Sensormeter Display (Touchscreen), verbunden über gemeinsame Architektur und SNMP" src="docs/projektfamilie-light.png">
+</picture>
+
 ESP32-basiertes 2,8"-Touchdisplay-System (Board HW-458B: ESP-WROOM-32 +
 ST7789P3 TFT, 240x320, resistiver 4-Draht-Touch). Zeigt wahlweise
 Innenraumklima (DHT11), Uhrzeit/Datum, Messwerte des
@@ -16,6 +22,7 @@ Sensormeter-Ziel) inkl. lokalem OTA-Update per `.bin`-Upload.
 | Datei | Inhalt |
 |---|---|
 | [docs/sensormeter-display-onepager.pdf](docs/sensormeter-display-onepager.pdf) | One-Pager: Projektübersicht, Architektur, Kennzahlen auf einer Seite |
+| [docs/projektfamilie.html](docs/projektfamilie.html) | Architekturskizze: wie die drei Sensormeter-Projekte zusammenhängen |
 | [docs/lastenheft.txt](docs/lastenheft.txt) | Fachliche Anforderungen: Hardware, GUI, Betriebsarten, Datenquellen, Fehlerbehandlung, Webserver-Nachtrag |
 | [docs/pflichtenheft.txt](docs/pflichtenheft.txt) | Technische Umsetzung: alle Softwaremodule, NVS-/LittleFS-Datenspeicherung, Startup-Flow, Fehlerbehandlung, Nebenläufigkeit |
 | [docs/implementierungsplan.html](docs/implementierungsplan.html) | Visueller Implementierungsplan P0–P8 (lokal im Browser öffnen) |
