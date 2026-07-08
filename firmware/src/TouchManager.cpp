@@ -76,15 +76,56 @@ bool TouchManager::readRaw(int32_t &rawX, int32_t &rawY) const {
 	if (!touched()) {
 		return false;
 	}
-	rawX = readChannel(kCmdReadX);
-	rawY = readChannel(kCmdReadY);
+	// Vertauscht (Hardware-Befund): Kommando 0xD0 liefert auf dieser
+	// Verkabelung tatsaechlich die vertikale Position, 0x90 die horizontale
+	// - siehe docs/entscheidungen.md. Deshalb hier ueber Kreuz zugewiesen,
+	// statt die Kommando-Konstanten umzubenennen (kCmdReadX/Y-Namen bleiben
+	// an den XPT2046-Standardnamen, nicht an dieser Verkabelung).
+	rawX = readChannel(kCmdReadY);
+	rawY = readChannel(kCmdReadX);
 	return touched(); // erneut pruefen, um Ausreisser beim Loslassen zu verwerfen
 }
 
 void TouchManager::waitForTap(int32_t &rawX, int32_t &rawY) const {
-	while (!readRaw(rawX, rawY)) {
-		delay(20);
+	// Nur fuer die Kalibrierung genutzt (nicht fuer read() im laufenden
+	// Betrieb): mittelt mehrere Samples waehrend anhaltender Beruehrung statt
+	// nur den allerersten, moeglicherweise noch verrauschten Kontakt zu
+	// nehmen. (Die eigentliche Ursache fuer die zunaechst kaputte 4-Punkt-
+	// Kalibrierung war ein vertauschter X/Y-Kanal in readRaw(), nicht fehlende
+	// Mittelung - siehe docs/entscheidungen.md. Die Mittelung bleibt trotzdem
+	// als zusaetzliche Robustheit gegen einzelne Ausreisser bestehen.)
+	constexpr int kSamples = 8;
+	constexpr int kMinSamples = 4;
+
+	for (;;) {
+		while (!readRaw(rawX, rawY)) {
+			delay(20);
+		}
+		delay(60); // Setzzeit
+
+		int64_t sumX = 0, sumY = 0;
+		int count = 0;
+		for (int i = 0; i < kSamples; i++) {
+			int32_t sx, sy;
+			if (readRaw(sx, sy)) {
+				sumX += sx;
+				sumY += sy;
+				count++;
+			}
+			delay(10);
+		}
+
+		if (count >= kMinSamples) {
+			rawX = static_cast<int32_t>(sumX / count);
+			rawY = static_cast<int32_t>(sumY / count);
+			break;
+		}
+		// Beruehrung war kuerzer als die Setzzeit+Sampling-Dauer (~140ms) -
+		// verwerfen und auf einen neuen, laenger gehaltenen Tipp warten,
+		// statt den unverzoegerten, potenziell verrauschten Erstwert zu
+		// uebernehmen.
 	}
+
 	delay(300); // Entprellen
 	int32_t dummyX, dummyY;
 	while (readRaw(dummyX, dummyY)) {
@@ -118,8 +159,14 @@ void TouchManager::runCalibration(DisplayManager &display) {
 		tft.setTextColor(TFT_BLACK, TFT_WHITE);
 		tft.setTextDatum(TL_DATUM);
 		tft.setTextFont(2);
-		tft.drawString(String("Kalibrierung: ") + targets[i].label + " antippen", 10, 10);
-		tft.fillCircle(targets[i].x, targets[i].y, 4, TFT_BLACK);
+		tft.drawString(String("Kalibrierung: ") + targets[i].label + " antippen und halten", 10, 10);
+		// Fadenkreuz statt 4px-Punkt (Hardware-Befund: der kleine Punkt war auf
+		// dem Display schwer praezise zu treffen, was zu eng beieinander
+		// liegenden Rohwerten ueber alle vier Ecken fuehrte).
+		constexpr int16_t kCrosshairArm = 12;
+		tft.drawFastHLine(targets[i].x - kCrosshairArm, targets[i].y, kCrosshairArm * 2, TFT_RED);
+		tft.drawFastVLine(targets[i].x, targets[i].y - kCrosshairArm, kCrosshairArm * 2, TFT_RED);
+		tft.drawCircle(targets[i].x, targets[i].y, 6, TFT_RED);
 
 		waitForTap(rawX[i], rawY[i]);
 	}

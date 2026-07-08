@@ -1,5 +1,38 @@
 # Entscheidungsprotokoll — Sensormeter Display
 
+## Erster echter Touch-Test: X/Y-Kanal vertauscht
+
+### Bug gefunden und behoben: Touch-Controller liefert X/Y vertauscht
+Beim ersten Test der neuen 4-Punkt-Kalibrierung auf echter Hardware kollabierten
+`xMin`/`xMax` bzw. `yMin`/`yMax` immer wieder auf nahezu denselben Wert
+(wenige Rohwert-Einheiten Unterschied), unabhaengig von Tippgenauigkeit,
+Zielgroesse oder Haltedauer der Beruehrung - drei nacheinander ausprobierte
+Erklaerungen (unzureichend eingeschwungener Rohwert, zu kleines/schwer
+treffbares Kalibrierziel, zu kurzer Tipp) brachten keine Besserung.
+
+Per-Sample-Debug-Log (`docs`/Kommentare in `TouchManager.cpp` zwischenzeitlich
+entfernt, siehe Git-Historie) zeigte den eigentlichen Grund: Kommando 0xD0
+(`kCmdReadX`) liefert auf dieser Verkabelung tatsaechlich die **vertikale**
+Position, Kommando 0x90 (`kCmdReadY`) die **horizontale** - die beiden Kanaele
+sind gegenueber der XPT2046-Standardannahme vertauscht. Die 4-Punkt-Mittelung
+mittelte dadurch z. B. "oben-links + unten-links" (fuer `xMin` gedacht), was
+auf dieser Verkabelung in Wirklichkeit eine hohe und eine niedrige
+*vertikale* Ablesung sind - kollabiert folgerichtig auf einen bedeutungslosen
+Mittelwert, komplett unabhaengig von der echten X-Position.
+
+Behoben durch Vertauschen der Kanalzuweisung in `TouchManager::readRaw()`
+(`rawX = readChannel(kCmdReadY)`, `rawY = readChannel(kCmdReadX)`) statt die
+Kommandokonstanten selbst umzubenennen - die Namen `kCmdReadX`/`kCmdReadY`
+bleiben an den XPT2046-Standardnamen orientiert, nicht an dieser
+konkreten Verkabelung. Nach dem Fix stimmen alle vier Kalibrierecken und
+freie Tipps praezise mit der angetippten Bildschirmposition ueberein
+(auf echter Hardware verifiziert).
+
+Die waehrend der Fehlersuche ergaenzte Setzzeit+Mittelung in `waitForTap()`
+sowie das groessere Fadenkreuz-Kalibrierziel (statt 4px-Punkt) waren nicht
+die Ursache, bleiben aber als sinnvolle Robustheit gegen einzelne Ausreisser
+bzw. schlecht treffbare Ziele bestehen.
+
 ## Webserver + OTA (Zusatzfunktion nach P0-P8)
 
 ### Async statt synchron (ESPAsyncWebServer/AsyncTCP)

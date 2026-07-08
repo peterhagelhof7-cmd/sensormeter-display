@@ -113,7 +113,8 @@ void loop() {
 	// nicht denselben, noch gehaltenen Tipp als seinen ersten Tastendruck
 	// missversteht.
 	int16_t tx, ty;
-	if (touch.read(tx, ty) &&
+	bool touchedNow = touch.read(tx, ty);
+	if (touchedNow &&
 	    UiHelpers::hitRect(tx, ty, StatusBar::kGearHitX, StatusBar::kGearHitY, StatusBar::kGearHitW,
 	                        StatusBar::kGearHitH)) {
 		while (touch.read(tx, ty)) {
