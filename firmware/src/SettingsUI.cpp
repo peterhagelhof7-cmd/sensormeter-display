@@ -25,11 +25,7 @@ const char *kMenuItems[] = {"Slide", "Static", "Snake", "Systemeinstellungen"};
 constexpr size_t kMenuItemCount = 4;
 
 void drawCloseButton(TFT_eSPI &tft) {
-	tft.drawRect(kCloseX, kCloseY, kCloseW, kCloseH, TFT_BLACK);
-	tft.setTextDatum(MC_DATUM);
-	tft.setTextFont(4);
-	tft.drawString("X", kCloseX + kCloseW / 2, kCloseY + kCloseH / 2);
-	tft.setTextDatum(TL_DATUM);
+	UiHelpers::drawCloseButton(tft, kCloseX, kCloseY, kCloseW, kCloseH);
 }
 
 void drawMenu(DisplayManager &display) {
@@ -193,7 +189,7 @@ constexpr int16_t kWlanButtonY = 154;
 constexpr int16_t kSensormeterButtonY = 182;
 constexpr int16_t kPingButtonY = 210;
 
-void drawSystemSettings(DisplayManager &display, uint8_t brightnessPercent, const String &sensormeterIp,
+void drawSystemSettings(DisplayManager &display, uint8_t brightnessPercent, size_t sensormeterTargetCount,
                         size_t pingTargetCount) {
 	TFT_eSPI &tft = display.raw();
 	tft.fillScreen(TFT_WHITE);
@@ -222,8 +218,9 @@ void drawSystemSettings(DisplayManager &display, uint8_t brightnessPercent, cons
 	tft.drawString("WLAN neu waehlen", kSysButtonX + kSysButtonW / 2, kWlanButtonY + kSysButtonH / 2);
 
 	tft.drawRect(kSysButtonX, kSensormeterButtonY, kSysButtonW, kSysButtonH, TFT_BLACK);
-	String smLabel = "Sensormeter-Ziel: " + (sensormeterIp.isEmpty() ? String("-") : sensormeterIp);
-	tft.drawString(smLabel, kSysButtonX + kSysButtonW / 2, kSensormeterButtonY + kSysButtonH / 2);
+	tft.drawString("Sensormeter-Ziele (" + String(sensormeterTargetCount) + "/" +
+	                   String(static_cast<int>(SettingsManager::kMaxSensormeterTargets)) + ")",
+	               kSysButtonX + kSysButtonW / 2, kSensormeterButtonY + kSysButtonH / 2);
 
 	tft.drawRect(kSysButtonX, kPingButtonY, kSysButtonW, kSysButtonH, TFT_BLACK);
 	tft.drawString("Ping-Ziele (" + String(pingTargetCount) + "/" +
@@ -232,41 +229,51 @@ void drawSystemSettings(DisplayManager &display, uint8_t brightnessPercent, cons
 	tft.setTextDatum(TL_DATUM);
 }
 
-void drawSensormeterList(DisplayManager &display, const String &ip, const String &community) {
+// Liste der Sensormeter-Ziele (IP-Adressen, bis zu kMaxSensormeterTargets) -
+// analog zur Ping-Zielliste. Die SNMP-Community ist absichtlich nicht per
+// Touch editierbar (nur ueber das Webinterface): das Zifferntastenfeld
+// deckt keine Buchstaben ab, eine volle Bildschirmtastatur waere fuer dieses
+// eine, selten geaenderte Feld unverhaeltnismaessig - siehe
+// docs/entscheidungen.md. Das letzte verbleibende Ziel kann nicht entfernt
+// werden (mindestens eins bleibt konfiguriert, siehe SettingsManager).
+void drawSensormeterList(DisplayManager &display, const SettingsManager &settings) {
 	TFT_eSPI &tft = display.raw();
 	tft.fillScreen(TFT_WHITE);
 	tft.setTextColor(TFT_BLACK, TFT_WHITE);
 	tft.setTextDatum(TL_DATUM);
 	tft.setTextFont(4);
-	tft.drawString("Sensormeter-Ziel", 10, 6);
+	tft.drawString("Sensormeter-Ziele", 10, 6);
 	drawCloseButton(tft);
 
 	tft.setTextFont(2);
-	tft.drawString("IP-Adresse:", 10, 50);
-	tft.drawRect(10, 68, kScreenW - 20, 30, TFT_BLACK);
-	tft.setTextDatum(MC_DATUM);
-	tft.setTextFont(4);
-	tft.drawString(ip.isEmpty() ? "(nicht gesetzt)" : ip, kScreenW / 2, 83);
+	tft.drawString("Community: " + settings.sensormeterCommunity() + " (nur im Webinterface aenderbar)", 10, 40);
 
-	tft.setTextDatum(TL_DATUM);
-	tft.setTextFont(2);
-	tft.drawString("Community:", 10, 110);
-	tft.drawRect(10, 128, kScreenW - 20, 30, TFT_BLACK);
-	tft.setTextDatum(MC_DATUM);
-	tft.setTextFont(4);
-	tft.drawString(community, kScreenW / 2, 143);
+	size_t count = settings.sensormeterTargetCount();
+	for (size_t i = 0; i < count; i++) {
+		int16_t y = 70 + static_cast<int16_t>(i) * 36;
+		tft.drawRect(10, y, kScreenW - 60, 30, TFT_BLACK);
+		tft.setTextDatum(ML_DATUM);
+		tft.setTextFont(2);
+		tft.drawString(settings.sensormeterTargetIp(i), 16, y + 15);
+		if (count > 1) {
+			tft.drawRect(kScreenW - 44, y, 34, 30, TFT_BLACK);
+			tft.setTextDatum(MC_DATUM);
+			tft.drawString("X", kScreenW - 27, y + 15);
+		}
+	}
+
+	if (count < SettingsManager::kMaxSensormeterTargets) {
+		int16_t y = 70 + static_cast<int16_t>(count) * 36;
+		tft.drawRect(10, y, kScreenW - 20, 30, TFT_BLACK);
+		tft.setTextDatum(MC_DATUM);
+		tft.setTextFont(2);
+		tft.drawString("+ Ziel hinzufuegen", kScreenW / 2, y + 15);
+	}
 	tft.setTextDatum(TL_DATUM);
 }
 
-// Sensormeter-Ziel (IP + Community) konfigurieren. Tippen auf das jeweilige
-// Feld oeffnet das Zifferntastenfeld (IP) bzw. eine vereinfachte
-// Community-Eingabe (nur Ziffern/Grossbuchstaben ueber dasselbe Tastenfeld
-// waere zu einschraenkend fuer "public" - daher feste Vorgabe "public",
-// nur die IP ist per Touch editierbar; siehe docs/entscheidungen.md).
 void runSensormeterConfig(DisplayManager &display, TouchManager &touch, SettingsManager &settings) {
-	String ip = settings.sensormeterIp();
-	String community = settings.sensormeterCommunity();
-	drawSensormeterList(display, ip, community);
+	drawSensormeterList(display, settings);
 
 	while (true) {
 		int16_t x, y;
@@ -275,14 +282,31 @@ void runSensormeterConfig(DisplayManager &display, TouchManager &touch, Settings
 		if (hitRect(x, y, kCloseX, kCloseY, kCloseW, kCloseH)) {
 			return;
 		}
-		if (hitRect(x, y, 10, 68, kScreenW - 20, 30)) {
-			bool cancelled = false;
-			String newIp = NumericKeypad::run(display, touch, "Sensormeter-IP", ip, cancelled);
-			if (!cancelled) {
-				ip = newIp;
-				settings.setSensormeterTarget(ip, community);
+
+		size_t count = settings.sensormeterTargetCount();
+		bool handled = false;
+		if (count > 1) {
+			for (size_t i = 0; i < count && !handled; i++) {
+				int16_t rowY = 70 + static_cast<int16_t>(i) * 36;
+				if (hitRect(x, y, kScreenW - 44, rowY, 34, 30)) {
+					settings.removeSensormeterTarget(i);
+					handled = true;
+				}
 			}
-			drawSensormeterList(display, ip, community);
+		}
+		if (!handled && count < SettingsManager::kMaxSensormeterTargets) {
+			int16_t addY = 70 + static_cast<int16_t>(count) * 36;
+			if (hitRect(x, y, 10, addY, kScreenW - 20, 30)) {
+				bool cancelled = false;
+				String newIp = NumericKeypad::run(display, touch, "Sensormeter-IP", "", cancelled);
+				if (!cancelled && !newIp.isEmpty()) {
+					settings.addSensormeterTarget(newIp);
+				}
+				handled = true;
+			}
+		}
+		if (handled) {
+			drawSensormeterList(display, settings);
 		}
 	}
 }
@@ -363,7 +387,7 @@ void runSystemSettings(DisplayManager &display, TouchManager &touch, WlanManager
                        WifiOnboarding &onboarding) {
 	uint8_t brightness = settings.brightnessPercent();
 	auto redraw = [&]() {
-		drawSystemSettings(display, brightness, settings.sensormeterIp(), settings.pingTargetCount());
+		drawSystemSettings(display, brightness, settings.sensormeterTargetCount(), settings.pingTargetCount());
 	};
 	redraw();
 

@@ -79,9 +79,49 @@ void WlanManager::saveCredentials(const String &ssid, const String &psk) {
 	prefs.end();
 }
 
+bool WlanManager::hasStaticIp() {
+	prefs.begin("wifi", true);
+	bool has = prefs.getBool("staticIp", false);
+	prefs.end();
+	return has;
+}
+
+bool WlanManager::loadStaticIp(IPAddress &ip, IPAddress &gateway, IPAddress &subnet) {
+	prefs.begin("wifi", true);
+	bool has = prefs.getBool("staticIp", false);
+	if (has) {
+		ip = IPAddress(prefs.getUInt("ip", 0));
+		gateway = IPAddress(prefs.getUInt("gw", 0));
+		subnet = IPAddress(prefs.getUInt("sn", 0));
+	}
+	prefs.end();
+	return has;
+}
+
+void WlanManager::saveStaticIp(const IPAddress &ip, const IPAddress &gateway, const IPAddress &subnet) {
+	prefs.begin("wifi", false);
+	prefs.putBool("staticIp", true);
+	prefs.putUInt("ip", static_cast<uint32_t>(ip));
+	prefs.putUInt("gw", static_cast<uint32_t>(gateway));
+	prefs.putUInt("sn", static_cast<uint32_t>(subnet));
+	prefs.end();
+}
+
+void WlanManager::clearStaticIp() {
+	prefs.begin("wifi", false);
+	prefs.putBool("staticIp", false);
+	prefs.end();
+}
+
 bool WlanManager::connect(const String &ssid, const String &psk, uint32_t timeoutMs) {
 	WiFi.disconnect();
 	delay(100);
+
+	IPAddress ip, gateway, subnet;
+	if (loadStaticIp(ip, gateway, subnet)) {
+		WiFi.config(ip, gateway, subnet);
+	}
+
 	WiFi.begin(ssid.c_str(), psk.c_str());
 
 	uint32_t start = millis();

@@ -22,8 +22,9 @@ String escapeHtml(const String &in) {
 
 } // namespace
 
-WebServerManager::WebServerManager(SettingsManager &settings, BacklightManager &backlight, OtaManager &ota)
-    : settings_(settings), backlight_(backlight), ota_(ota) {}
+WebServerManager::WebServerManager(SettingsManager &settings, BacklightManager &backlight, OtaManager &ota,
+                                    WlanManager &wlan)
+    : settings_(settings), backlight_(backlight), ota_(ota), wlan_(wlan) {}
 
 bool WebServerManager::checkAuth(AsyncWebServerRequest *request) const {
 	if (!request->authenticate("admin", settings_.webPassword().c_str())) {
@@ -89,14 +90,34 @@ String WebServerManager::buildPage() const {
 	        String(settings_.brightnessPercent()) + "\"> %";
 	html += "</fieldset>";
 
-	html += "<fieldset><legend>Sensormeter-Ziel (SNMP)</legend>";
-	html += "<label>IP-Adresse</label><input name=\"smIp\" value=\"" + escapeHtml(settings_.sensormeterIp()) + "\">";
-	html += "<label>Community</label><input name=\"smCommunity\" value=\"" +
+	html += "<fieldset><legend>Sensormeter (SNMP)</legend>";
+	html += "<label>Community (gilt fuer alle Ziele)</label><input name=\"smCommunity\" value=\"" +
 	        escapeHtml(settings_.sensormeterCommunity()) + "\">";
 	html += "</fieldset>";
 
 	html += "<button type=\"submit\">Speichern</button>";
 	html += "</form>";
+
+	// --- Sensormeter-Ziele (eigene, dynamische Liste - separate Formulare,
+	// analog zu den Ping-Zielen) ---
+	html += "<fieldset><legend>Sensormeter-Ziele (max. " + String(SettingsManager::kMaxSensormeterTargets) +
+	        ", mind. 1)</legend>";
+	size_t smCount = settings_.sensormeterTargetCount();
+	for (size_t i = 0; i < smCount; i++) {
+		html += "<div class=\"row\"><span>" + escapeHtml(settings_.sensormeterTargetIp(i)) + "</span>";
+		if (smCount > 1) {
+			html += "<form method=\"POST\" action=\"/sensormeter/remove\" style=\"margin:0\">";
+			html += "<input type=\"hidden\" name=\"i\" value=\"" + String(i) + "\">";
+			html += "<button type=\"submit\">Entfernen</button></form>";
+		}
+		html += "</div>";
+	}
+	if (smCount < SettingsManager::kMaxSensormeterTargets) {
+		html += "<form method=\"POST\" action=\"/sensormeter/add\">";
+		html += "<label>Neues Ziel (IP-Adresse)</label><input name=\"ip\">";
+		html += "<button type=\"submit\">Hinzufuegen</button></form>";
+	}
+	html += "</fieldset>";
 
 	// --- Ping-Ziele (eigene, dynamische Liste - separate Formulare) ---
 	html += "<fieldset><legend>Ping-Ziele (max. " + String(SettingsManager::kMaxPingTargets) + ")</legend>";
@@ -112,6 +133,31 @@ String WebServerManager::buildPage() const {
 		html += "<button type=\"submit\">Hinzufuegen</button></form>";
 	}
 	html += "</fieldset>";
+
+	// --- Netzwerk (statische IP, sonst DHCP) - eigenes Formular mit
+	// eigenem Endpunkt, da das Anwenden neuer Netzwerkeinstellungen einen
+	// Neustart braucht (WiFi.config() wirkt erst bei der naechsten
+	// Verbindung, nicht auf eine bereits bestehende) ---
+	{
+		bool staticIp = wlan_.hasStaticIp();
+		IPAddress ip, gateway, subnet;
+		wlan_.loadStaticIp(ip, gateway, subnet);
+		html += "<fieldset><legend>Netzwerk</legend>";
+		html += "<p>Aktuelle IP: " + WiFi.localIP().toString() + " (" + (staticIp ? "statisch" : "DHCP") + ")</p>";
+		html += "<form method=\"POST\" action=\"/network/save\">";
+		html += "<label><input type=\"radio\" name=\"ipMode\" value=\"dhcp\"" + String(staticIp ? "" : " checked") +
+		        "> Automatisch (DHCP)</label>";
+		html += "<label><input type=\"radio\" name=\"ipMode\" value=\"static\"" +
+		        String(staticIp ? " checked" : "") + "> Statisch</label>";
+		html += "<label>IP-Adresse</label><input name=\"ip\" value=\"" +
+		        (staticIp ? ip.toString() : String("")) + "\">";
+		html += "<label>Gateway</label><input name=\"gateway\" value=\"" +
+		        (staticIp ? gateway.toString() : String("")) + "\">";
+		html += "<label>Subnetzmaske</label><input name=\"subnet\" value=\"" +
+		        (staticIp ? subnet.toString() : String("255.255.255.0")) + "\">";
+		html += "<button type=\"submit\">Speichern (Geraet startet neu)</button>";
+		html += "</form></fieldset>";
+	}
 
 	// --- Firmware-Update ---
 	html += "<fieldset><legend>Firmware-Update</legend>";
@@ -142,9 +188,8 @@ void WebServerManager::handleSave(AsyncWebServerRequest *request) {
 		backlight_.setPercent(static_cast<uint8_t>(b));
 		settings_.setBrightnessPercent(static_cast<uint8_t>(b));
 	}
-	if (request->hasParam("smIp", true) && request->hasParam("smCommunity", true)) {
-		settings_.setSensormeterTarget(request->getParam("smIp", true)->value(),
-		                                request->getParam("smCommunity", true)->value());
+	if (request->hasParam("smCommunity", true)) {
+		settings_.setSensormeterCommunity(request->getParam("smCommunity", true)->value());
 	}
 
 	String mode = request->hasParam("mode", true) ? request->getParam("mode", true)->value() : "slide";
@@ -186,6 +231,49 @@ void WebServerManager::handlePingRemove(AsyncWebServerRequest *request) {
 	request->redirect("/");
 }
 
+void WebServerManager::handleSensormeterAdd(AsyncWebServerRequest *request) {
+	if (!checkAuth(request)) return;
+	if (request->hasParam("ip", true)) {
+		String ip = request->getParam("ip", true)->value();
+		if (!ip.isEmpty()) {
+			settings_.addSensormeterTarget(ip);
+		}
+	}
+	request->redirect("/");
+}
+
+void WebServerManager::handleSensormeterRemove(AsyncWebServerRequest *request) {
+	if (!checkAuth(request)) return;
+	if (request->hasParam("i", true)) {
+		size_t idx = static_cast<size_t>(request->getParam("i", true)->value().toInt());
+		settings_.removeSensormeterTarget(idx);
+	}
+	request->redirect("/");
+}
+
+void WebServerManager::handleNetworkSave(AsyncWebServerRequest *request) {
+	if (!checkAuth(request)) return;
+
+	String ipMode = request->hasParam("ipMode", true) ? request->getParam("ipMode", true)->value() : "dhcp";
+	if (ipMode == "static") {
+		IPAddress ip, gateway, subnet;
+		bool okIp = request->hasParam("ip", true) && ip.fromString(request->getParam("ip", true)->value());
+		bool okGw =
+		    request->hasParam("gateway", true) && gateway.fromString(request->getParam("gateway", true)->value());
+		bool okSn =
+		    request->hasParam("subnet", true) && subnet.fromString(request->getParam("subnet", true)->value());
+		if (okIp && okGw && okSn) {
+			wlan_.saveStaticIp(ip, gateway, subnet);
+		}
+	} else {
+		wlan_.clearStaticIp();
+	}
+
+	request->send(200, "text/plain", "Netzwerkeinstellungen gespeichert, Geraet startet neu ...");
+	delay(500);
+	ESP.restart();
+}
+
 void WebServerManager::handleOtaUploadChunk(AsyncWebServerRequest *request, const String &filename,
                                              size_t index, uint8_t *data, size_t len, bool final) {
 	if (!checkAuth(request)) return;
@@ -224,6 +312,11 @@ void WebServerManager::begin() {
 	server_.on("/ping/add", HTTP_POST, [this](AsyncWebServerRequest *request) { handlePingAdd(request); });
 	server_.on("/ping/remove", HTTP_POST,
 	           [this](AsyncWebServerRequest *request) { handlePingRemove(request); });
+	server_.on("/sensormeter/add", HTTP_POST,
+	           [this](AsyncWebServerRequest *request) { handleSensormeterAdd(request); });
+	server_.on("/sensormeter/remove", HTTP_POST,
+	           [this](AsyncWebServerRequest *request) { handleSensormeterRemove(request); });
+	server_.on("/network/save", HTTP_POST, [this](AsyncWebServerRequest *request) { handleNetworkSave(request); });
 
 	server_.on(
 	    "/ota/upload", HTTP_POST, [this](AsyncWebServerRequest *request) { handleOtaUploadComplete(request); },

@@ -1,5 +1,95 @@
 # Entscheidungsprotokoll — Sensormeter Display
 
+## Mehrfach-Sensormeter-Ziele, Geraete-Info-Dialog, Static-IP (Erweiterung ueber lastenheft.txt 7.3 hinaus)
+
+Nutzerwunsch, ueber das urspruengliche Lastenheft hinaus: statt genau eines
+Sensormeter-Ziels sollen bis zu 5 (mindestens 1) abfragbar sein, je mit
+automatisch generiertem Slide; zusaetzlich ein Info-Dialog fuers Display
+selbst (Systemname/IP/DHCP-Static) und echte Static-IP-Konfiguration. Noch
+NICHT an echter Hardware verifiziert (kein Sensormeter-Geraet zum Testen
+erreichbar) - nur Build+Boot am Geraet bestaetigt. Bei Gelegenheit mit
+echtem Sensormeter nachpruefen.
+
+### PRO-Erkennung ueber den Typ-String, nicht ueber eine eigene Konfiguration
+Das Sensormeter-Projekt leitet `systemType` automatisch aus `sensor2Enabled`
+ab (`deriveSystemType()` in dessen `ConfigManager.cpp`: `"Sensormeter PRO"`
+vs. `"Sensormeter"`) - kein separates Konfigurationsfeld. Die Display-Seite
+prueft daher einfach auf den exakten String `"Sensormeter PRO"` (OID
+`.1.3.0`) statt eine eigene Heuristik zu bauen. Sensor-2-Temperatur/-Feuchte
+werden nur abgefragt, wenn dieser Typ erkannt wurde - beim normalen Typ
+liefert das Sensormeter-Geraet dafuer ohnehin durchgehend `0` (kein Fehler),
+das waere sonst nicht von einer echten Nullmessung unterscheidbar gewesen.
+
+### SnmpClient um getString() erweitert (Refactor auf gemeinsamen Kern)
+`SnmpClient` konnte bisher nur INTEGER-Werte lesen (Temperatur/Feuchte).
+Fuer Systemname/-typ/Sensor-Namen (SNMP OCTET STRING) wurde die BER-
+Response-Verarbeitung in eine gemeinsame private `getRaw()`-Methode
+extrahiert (liefert Tag-gefiltert die Rohbytes des letzten passenden
+TLV-Elements), `getInteger()`/`getString()` interpretieren die Bytes nur
+noch unterschiedlich. Vermeidet Duplikation der Request-Kodierung/
+Response-Iteration zwischen beiden Methoden.
+
+### SensormeterManager: Identitaet einmalig pro Ziel, danach nur Messwerte
+Pro Ziel wird zuerst Systemname+Typ+Sensor-Name(n) aufgeloest (mehrere
+sequentielle SNMP-GETs in einem Rutsch - passiert nur einmal beim
+Hinzufuegen/Aendern eines Ziels, ein laengerer Blockierzeitraum bei einem
+gerade neu eingetragenen, noch nicht erreichbaren Ziel ist dafuer
+akzeptabel, der Nutzer sitzt ohnehin in den Einstellungen). Danach werden
+nur noch die eigentlichen Messwerte im Round-Robin aktualisiert (ein Ziel
+pro `update()`-Aufruf, `kCheckIntervalMs=4000`) - analog zu
+`PingManager::pingNextTarget()`, damit ein nicht erreichbares Ziel nicht
+den Hauptloop blockiert.
+
+### SensormeterView rotiert intern durch alle Sensor-Slides
+Da "Sensormeter" im Static-Modus weiterhin ein einzelner Menuepunkt bleibt
+(Nutzerentscheidung, keine 10 einzelnen Static-Eintraege), aber bis zu 10
+Sensor-Slides (5 Ziele x 2 Sensoren bei PRO) anzeigen koennen muss, verwaltet
+`SensormeterView` selbst einen Rotationsindex + eigenen `millis()`-Timer
+(`kSubSlideIntervalMs=4000`) - unabhaengig davon, wie oft `draw()` vom
+Hauptloop aufgerufen wird (gleiches Prinzip wie das WLAN-Blinksymbol in
+StatusBar). `main.cpp` behandelt `DataSource::Sensormeter` deshalb wie
+`Uhrzeit` als Quelle, die auch ohne neue Messung periodisch neu gezeichnet
+werden muss (`periodicDue`), damit die interne Rotation ueberhaupt sichtbar
+wird.
+
+### Community bleibt touch-uneditierbar, nur ueber Web
+Bestehende Entscheidung uebernommen: das Zifferntastenfeld deckt keine
+Buchstaben ab, eine volle Bildschirmtastatur waere fuer dieses eine, selten
+geaenderte, gemeinsame Feld unverhaeltnismaessig. Touch-UI zeigt die
+Community nur lesend an, Aendern nur ueber das Webinterface.
+
+### Mindestens 1 Sensormeter-Ziel: in SettingsManager statt nur in der UI erzwungen
+`removeSensormeterTarget()` verweigert das Entfernen, wenn nur noch ein
+Ziel uebrig ist - zentral in `SettingsManager` statt getrennt in Touch- und
+Web-UI, damit beide Oberflaechen nicht unabhaengig voneinander auf diese
+Regel achten muessen. Ein frisch geflashtes Geraet startet trotzdem bei 0
+Zielen (wie bei den Ping-Zielen) - die Regel greift erst, sobald das erste
+Ziel hinzugefuegt wurde.
+
+### UiHelpers::drawCloseButton() extrahiert (zweiter Verbraucher: InfoUI)
+Der "X"-Schliessen-Button existierte bisher nur lokal in `SettingsUI.cpp`.
+Mit `InfoUI` als zweitem Verbraucher nach `UiHelpers.h/.cpp` verschoben -
+gleiches Muster wie zuvor bei `hitRect`/`waitForTapEvent` (dort ebenfalls
+erst bei einem zweiten Verbraucher ausgelagert, nicht vorzeitig).
+
+### Info-Dialog nutzt das bereits bestehende `deviceName()`, keine neue Einstellung
+Die urspruengliche Frage war, ob fuer den Info-Dialog ein neuer
+"Systemname" fuer das Display selbst noetig ist. `SettingsManager` hatte
+bereits ein `deviceName()`-Feld (Default "Sensormeter Display", ueber das
+Webinterface als "Systemname" editierbar, bisher nur fuer Seitentitel/
+Ueberschrift der Weboberflaeche genutzt) - dieses wird jetzt zusaetzlich im
+Info-Dialog angezeigt, keine neue Einstellung noetig.
+
+### Static-IP: eigenes Formular mit sofortigem Neustart
+Netzwerkeinstellungen (`WiFi.config()`) wirken erst bei der naechsten
+Verbindung, nicht auf eine bereits bestehende Session - das Speichern der
+Static-IP-Einstellungen im Webinterface loest daher bewusst einen
+sofortigen `ESP.restart()` aus (wie beim OTA-Update), statt den Nutzer im
+Unklaren zu lassen, warum die Aenderung "nicht wirkt". Gespeichert im
+selben NVS-Namespace wie die WLAN-Zugangsdaten (`WlanManager`, nicht
+`SettingsManager`), da es sich um Verbindungskonfiguration handelt, nicht
+um eine App-Einstellung.
+
 ## RGB-Status-LED leuchtete dauerhaft trotz "aus"
 
 ### Bug gefunden und behoben: LED-Polaritaet umgekehrt (gemeinsame Anode statt Kathode)

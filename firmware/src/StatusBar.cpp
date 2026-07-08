@@ -63,6 +63,15 @@ void StatusBar::drawWifiIcon(TFT_eSPI &tft, int16_t x, int16_t y, int8_t bars) c
 	}
 }
 
+void StatusBar::drawInfoIcon(TFT_eSPI &tft, int16_t cx, int16_t cy, int16_t r, uint16_t bgColor) const {
+	tft.drawCircle(cx, cy, r, kIconColor);
+	tft.setTextColor(kIconColor, bgColor);
+	tft.setTextDatum(MC_DATUM);
+	tft.setTextFont(4);
+	tft.drawString("i", cx, cy + 1);
+	tft.setTextDatum(TL_DATUM);
+}
+
 void StatusBar::draw(DisplayManager &display, WlanManager &wlan, bool sensorValid, float tempC,
                       float humidityPct, const String &timeHHMM, const String &dateLine,
                       bool showBottomBar, uint16_t bgColor) {
@@ -96,6 +105,7 @@ void StatusBar::draw(DisplayManager &display, WlanManager &wlan, bool sensorVali
 
 	drawGearIcon(tft, 18, Layout::kStatusBarHeight / 2, 11, bgColor);
 	drawWifiIcon(tft, 44, Layout::kStatusBarHeight / 2 - 8, bars);
+	drawInfoIcon(tft, 92, Layout::kStatusBarHeight / 2, 11, bgColor);
 
 	tft.setTextColor(kIconColor, bgColor);
 	tft.setTextDatum(MR_DATUM);

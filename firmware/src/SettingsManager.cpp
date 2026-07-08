@@ -11,8 +11,21 @@ void SettingsManager::load() {
 	slideIntervalSec_ = prefs.getUShort("slideSec", kSlideIntervalDefaultSec);
 	staticSource_ = static_cast<DataSource>(prefs.getUChar("staticSrc", static_cast<uint8_t>(DataSource::Dht11)));
 	brightnessPercent_ = prefs.getUChar("brightness", kBrightnessDefaultPercent);
-	sensormeterIp_ = prefs.getString("smIp", "");
 	sensormeterCommunity_ = prefs.getString("smCommunity", "public");
+	// Migration vom frueheren Einzelziel-Schema ("smIp"): falls vorhanden und
+	// noch keine Ziel-Liste existiert, als erstes Listen-Element uebernehmen.
+	String legacyIp = prefs.getString("smIp", "");
+	sensormeterTargetCount_ = prefs.getUChar("smCount", legacyIp.isEmpty() ? 0 : 1);
+	if (sensormeterTargetCount_ > kMaxSensormeterTargets) sensormeterTargetCount_ = kMaxSensormeterTargets;
+	if (!prefs.isKey("smCount") && !legacyIp.isEmpty()) {
+		sensormeterTargets_[0] = legacyIp;
+	} else {
+		for (size_t i = 0; i < sensormeterTargetCount_; i++) {
+			char key[8];
+			snprintf(key, sizeof(key), "sm%u", static_cast<unsigned>(i));
+			sensormeterTargets_[i] = prefs.getString(key, "");
+		}
+	}
 	pingTargetCount_ = prefs.getUChar("pingCount", 0);
 	if (pingTargetCount_ > kMaxPingTargets) pingTargetCount_ = kMaxPingTargets;
 	for (size_t i = 0; i < pingTargetCount_; i++) {
@@ -42,10 +55,20 @@ void SettingsManager::save() {
 	prefs.putUShort("slideSec", slideIntervalSec_);
 	prefs.putUChar("staticSrc", static_cast<uint8_t>(staticSource_));
 	prefs.putUChar("brightness", brightnessPercent_);
-	prefs.putString("smIp", sensormeterIp_);
 	prefs.putString("smCommunity", sensormeterCommunity_);
 	prefs.putString("name", deviceName_);
 	prefs.putString("webPw", webPassword_);
+	prefs.end();
+}
+
+void SettingsManager::saveSensormeterTargets() {
+	prefs.begin("settings", false);
+	prefs.putUChar("smCount", static_cast<uint8_t>(sensormeterTargetCount_));
+	for (size_t i = 0; i < sensormeterTargetCount_; i++) {
+		char key[8];
+		snprintf(key, sizeof(key), "sm%u", static_cast<unsigned>(i));
+		prefs.putString(key, sensormeterTargets_[i]);
+	}
 	prefs.end();
 }
 
@@ -114,13 +137,6 @@ void SettingsManager::setBrightnessPercent(uint8_t percent) {
 	xSemaphoreGive(mutex_);
 }
 
-String SettingsManager::sensormeterIp() const {
-	xSemaphoreTake(mutex_, portMAX_DELAY);
-	String v = sensormeterIp_;
-	xSemaphoreGive(mutex_);
-	return v;
-}
-
 String SettingsManager::sensormeterCommunity() const {
 	xSemaphoreTake(mutex_, portMAX_DELAY);
 	String v = sensormeterCommunity_;
@@ -128,11 +144,51 @@ String SettingsManager::sensormeterCommunity() const {
 	return v;
 }
 
-void SettingsManager::setSensormeterTarget(const String &ip, const String &community) {
+void SettingsManager::setSensormeterCommunity(const String &community) {
 	xSemaphoreTake(mutex_, portMAX_DELAY);
-	sensormeterIp_ = ip;
 	sensormeterCommunity_ = community.isEmpty() ? "public" : community;
 	save();
+	xSemaphoreGive(mutex_);
+}
+
+size_t SettingsManager::sensormeterTargetCount() const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	size_t v = sensormeterTargetCount_;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+String SettingsManager::sensormeterTargetIp(size_t i) const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	String v = (i < sensormeterTargetCount_) ? sensormeterTargets_[i] : String();
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+bool SettingsManager::addSensormeterTarget(const String &ip) {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	bool ok = false;
+	if (sensormeterTargetCount_ < kMaxSensormeterTargets) {
+		sensormeterTargets_[sensormeterTargetCount_++] = ip;
+		saveSensormeterTargets();
+		ok = true;
+	}
+	xSemaphoreGive(mutex_);
+	return ok;
+}
+
+void SettingsManager::removeSensormeterTarget(size_t i) {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	// Mindestens ein Ziel bleibt erhalten, sobald eins konfiguriert wurde
+	// (Nutzervorgabe) - zentral hier statt nur in der UI durchgesetzt, damit
+	// Touch- und Web-Oberflaeche nicht getrennt darauf achten muessen.
+	if (i < sensormeterTargetCount_ && sensormeterTargetCount_ > 1) {
+		for (size_t j = i; j + 1 < sensormeterTargetCount_; j++) {
+			sensormeterTargets_[j] = sensormeterTargets_[j + 1];
+		}
+		sensormeterTargetCount_--;
+		saveSensormeterTargets();
+	}
 	xSemaphoreGive(mutex_);
 }
 

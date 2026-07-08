@@ -1,5 +1,6 @@
 #include "SnmpClient.h"
 
+#include <string.h>
 #include <vector>
 
 namespace {
@@ -83,8 +84,8 @@ void encodeNull(BerBuffer &out) {
 
 } // namespace
 
-bool SnmpClient::getInteger(const String &host, const String &community, const String &oidDotted,
-                             int32_t &outValue, uint16_t port, uint32_t timeoutMs) {
+bool SnmpClient::getRaw(const String &host, const String &community, const String &oidDotted, uint8_t wantTag,
+                         uint8_t *outContent, size_t &outLen, uint16_t port, uint32_t timeoutMs) {
 	// Varbind: SEQUENCE { OID, NULL }
 	BerBuffer oidBuf;
 	encodeOid(oidDotted, oidBuf);
@@ -162,13 +163,13 @@ bool SnmpClient::getInteger(const String &host, const String &community, const S
 	// Typen (SEQUENCE/PDU, Tags 0x30/0xA0/0xA2) einen Schritt "hinein" gehen
 	// statt darueber hinweg zu springen, bei allen anderen darueber hinweg.
 	// Da unsere Antwort ausschliesslich verschachtelt ist (keine Geschwister
-	// auf oberster Ebene), liefert das den letzten INTEGER-Wert im Baum -
-	// bei einem Einzel-Varbind-GetResponse genau der gesuchte Messwert.
+	// auf oberster Ebene), liefert das den letzten Element mit passendem Tag
+	// im Baum - bei einem Einzel-Varbind-GetResponse genau der gesuchte Wert.
 	// Deckt keine SNMP-Fehlerantworten (errorStatus != 0) gesondert ab, siehe
 	// docs/entscheidungen.md.
 	int idx = 0;
-	int32_t lastInt = 0;
 	bool found = false;
+	int foundStart = 0, foundLen = 0;
 	while (idx < n - 1) {
 		uint8_t tag = resp[idx];
 		uint8_t lenByte = resp[idx + 1];
@@ -179,13 +180,9 @@ bool SnmpClient::getInteger(const String &host, const String &community, const S
 		int contentStart = idx + 2;
 		if (contentStart + contentLen > n) break;
 
-		if (tag == 0x02) {
-			int32_t v = 0;
-			if (contentLen > 0 && (resp[contentStart] & 0x80)) v = -1;
-			for (int i = 0; i < contentLen; i++) {
-				v = (v << 8) | resp[contentStart + i];
-			}
-			lastInt = v;
+		if (tag == wantTag) {
+			foundStart = contentStart;
+			foundLen = contentLen;
 			found = true;
 		}
 
@@ -196,9 +193,40 @@ bool SnmpClient::getInteger(const String &host, const String &community, const S
 		}
 	}
 
-	if (!found) {
+	if (!found || static_cast<size_t>(foundLen) > outLen) {
 		return false;
 	}
-	outValue = lastInt;
+	memcpy(outContent, resp + foundStart, foundLen);
+	outLen = static_cast<size_t>(foundLen);
+	return true;
+}
+
+bool SnmpClient::getInteger(const String &host, const String &community, const String &oidDotted,
+                             int32_t &outValue, uint16_t port, uint32_t timeoutMs) {
+	uint8_t content[8];
+	size_t len = sizeof(content);
+	if (!getRaw(host, community, oidDotted, 0x02, content, len, port, timeoutMs)) {
+		return false;
+	}
+	int32_t v = 0;
+	if (len > 0 && (content[0] & 0x80)) v = -1;
+	for (size_t i = 0; i < len; i++) {
+		v = (v << 8) | content[i];
+	}
+	outValue = v;
+	return true;
+}
+
+bool SnmpClient::getString(const String &host, const String &community, const String &oidDotted,
+                            String &outValue, uint16_t port, uint32_t timeoutMs) {
+	uint8_t content[128];
+	size_t len = sizeof(content);
+	if (!getRaw(host, community, oidDotted, 0x04, content, len, port, timeoutMs)) {
+		return false;
+	}
+	char buf[129];
+	memcpy(buf, content, len);
+	buf[len] = '\0';
+	outValue = String(buf);
 	return true;
 }

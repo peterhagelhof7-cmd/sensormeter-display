@@ -7,7 +7,7 @@
 #include "SensorManager.h"
 #include "GraphManager.h"
 #include "ClockView.h"
-#include "SensormeterClient.h"
+#include "SensormeterManager.h"
 #include "SensormeterView.h"
 #include "PingManager.h"
 #include "PingView.h"
@@ -22,6 +22,7 @@
 #include "UiHelpers.h"
 #include "OtaManager.h"
 #include "WebServerManager.h"
+#include "InfoUI.h"
 
 DisplayManager display;
 TouchManager touch;
@@ -30,7 +31,7 @@ WifiOnboarding onboarding;
 SensorManager sensor;
 GraphManager graph;
 ClockView clockView;
-SensormeterClient sensormeterClient;
+SensormeterManager sensormeterManager;
 SensormeterView sensormeterView;
 PingManager pingManager;
 PingView pingView;
@@ -40,7 +41,7 @@ SettingsManager settings;
 BacklightManager backlight;
 SettingsUI settingsUI;
 OtaManager ota;
-WebServerManager webServer(settings, backlight, ota);
+WebServerManager webServer(settings, backlight, ota, wlan);
 
 uint32_t lastStatusBarMs = 0;
 // 300ms statt z.B. 1000ms, damit das 500ms-Blinken des WLAN-Symbols nicht
@@ -125,12 +126,23 @@ void loop() {
 		lastStatusBarMs = 0;
 	}
 
+	// Info-Symbol antippbar - oeffnet InfoUI (Systemname/IP/DHCP-Static),
+	// gleiches Muster wie das Zahnrad oben.
+	if (touchedNow && UiHelpers::hitRect(tx, ty, StatusBar::kInfoHitX, StatusBar::kInfoHitY,
+	                                     StatusBar::kInfoHitW, StatusBar::kInfoHitH)) {
+		while (touch.read(tx, ty)) {
+			delay(15);
+		}
+		InfoUI::run(display, touch, settings, wlan);
+		contentDirty = true;
+		lastStatusBarMs = 0;
+	}
+
 	bool dhtPolled = sensor.update();
 	if (dhtPolled) {
 		graph.maybeRecord(sensor.temperatureC(), sensor.humidityPercent());
 	}
-	bool sensormeterPolled =
-	    sensormeterClient.update(settings.sensormeterIp(), settings.sensormeterCommunity());
+	bool sensormeterPolled = sensormeterManager.update(settings);
 	bool pingPolled = pingManager.update(settings);
 
 	// Anhaltender Ping-Fehler (>1 Min. an google.com): LED blinkt rot und
@@ -145,14 +157,15 @@ void loop() {
 	int16_t contentBottom = showBottomBar ? Layout::kContentBottom : DisplayManager::kScreenHeight;
 
 	uint32_t now = millis();
-	// Nur die Uhrzeit-Ansicht braucht einen Redraw ohne neue Messung (die
-	// Anzeige aendert sich rein zeitgesteuert). Fuer die anderen Quellen
-	// erzeugte ein unbedingter 5s-Takt einen sichtbaren, unnoetigen
-	// Full-Redraw ohne Datenaenderung (Hardware-Befund: Bildschirm
-	// "zitterte" gelegentlich, siehe docs/entscheidungen.md) - dafuer reicht
-	// bereits sourceJustPolled/contentDirty.
-	bool periodicDue =
-	    activeSource == DataSource::Uhrzeit && (now - lastPeriodicRedrawMs >= kPeriodicRedrawIntervalMs);
+	// Nur Uhrzeit- und Sensormeter-Ansicht brauchen einen Redraw ohne neue
+	// Messung (Uhrzeit aendert sich rein zeitgesteuert, Sensormeter rotiert
+	// bei mehreren Zielen/Sensoren intern durch die Slides - siehe
+	// SensormeterView). Fuer die anderen Quellen erzeugte ein unbedingter
+	// 5s-Takt einen sichtbaren, unnoetigen Full-Redraw ohne Datenaenderung
+	// (Hardware-Befund: Bildschirm "zitterte" gelegentlich, siehe
+	// docs/entscheidungen.md) - dafuer reicht bereits sourceJustPolled/contentDirty.
+	bool periodicDue = (activeSource == DataSource::Uhrzeit || activeSource == DataSource::Sensormeter) &&
+	                    (now - lastPeriodicRedrawMs >= kPeriodicRedrawIntervalMs);
 
 	bool sourceJustPolled = (activeSource == DataSource::Dht11 && dhtPolled) ||
 	                        (activeSource == DataSource::Sensormeter && sensormeterPolled) ||
@@ -174,7 +187,7 @@ void loop() {
 				clockView.draw(display, Layout::kContentTop, contentBottom, bgColor);
 				break;
 			case DataSource::Sensormeter:
-				sensormeterView.draw(display, sensormeterClient, Layout::kContentTop, contentBottom, bgColor);
+				sensormeterView.draw(display, sensormeterManager, Layout::kContentTop, contentBottom, bgColor);
 				break;
 			case DataSource::Ping:
 				pingView.drawAverage(display, pingManager, Layout::kContentTop, contentBottom, bgColor);

@@ -27,6 +27,15 @@ public:
 	bool loadCredentials(String &ssid, String &psk);
 	void saveCredentials(const String &ssid, const String &psk);
 
+	// Statische IP (optional, sonst DHCP) - wird in connect()/autoConnect()
+	// automatisch angewendet, falls vorhanden. Gespeichert im selben
+	// NVS-Namespace wie die WLAN-Zugangsdaten, da beides zur
+	// Verbindungskonfiguration gehoert.
+	bool hasStaticIp();
+	bool loadStaticIp(IPAddress &ip, IPAddress &gateway, IPAddress &subnet);
+	void saveStaticIp(const IPAddress &ip, const IPAddress &gateway, const IPAddress &subnet);
+	void clearStaticIp();
+
 	// Verbindet mit den uebergebenen Zugangsdaten, blockierend bis
 	// verbunden oder Timeout. Speichert bei Erfolg NICHT automatisch
 	// (das entscheidet der Aufrufer, siehe WifiOnboarding).

@@ -16,3 +16,11 @@ void UiHelpers::waitForTapEvent(TouchManager &touch, int16_t &x, int16_t &y) {
 		delay(15);
 	}
 }
+
+void UiHelpers::drawCloseButton(TFT_eSPI &tft, int16_t x, int16_t y, int16_t w, int16_t h) {
+	tft.drawRect(x, y, w, h, TFT_BLACK);
+	tft.setTextDatum(MC_DATUM);
+	tft.setTextFont(4);
+	tft.drawString("X", x + w / 2, y + h / 2);
+	tft.setTextDatum(TL_DATUM);
+}

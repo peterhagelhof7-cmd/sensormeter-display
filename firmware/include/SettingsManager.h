@@ -25,6 +25,7 @@ public:
 	static constexpr uint16_t kSlideIntervalDefaultSec = 10;
 	static constexpr uint8_t kBrightnessDefaultPercent = 60;
 	static constexpr size_t kMaxPingTargets = 5;
+	static constexpr size_t kMaxSensormeterTargets = 5;
 
 	void begin();
 
@@ -37,9 +38,20 @@ public:
 	void setStaticMode(DataSource source);
 	void setBrightnessPercent(uint8_t percent);
 
-	String sensormeterIp() const;
+	// Bis zu kMaxSensormeterTargets Ziele, eine gemeinsame SNMP-Community fuer
+	// alle (siehe docs/entscheidungen.md). Wie bei den Ping-Zielen ist 0 der
+	// technische Startzustand eines frisch geflashten Geraets; die
+	// Bedienoberflaechen (Touch/Web) verhindern aber das Entfernen des
+	// letzten verbliebenen Ziels, sodass im laufenden Betrieb immer
+	// mindestens eins konfiguriert bleibt, sobald eins hinzugefuegt wurde.
 	String sensormeterCommunity() const;
-	void setSensormeterTarget(const String &ip, const String &community);
+	void setSensormeterCommunity(const String &community);
+
+	size_t sensormeterTargetCount() const;
+	String sensormeterTargetIp(size_t i) const;
+	// Liefert false, wenn bereits kMaxSensormeterTargets erreicht sind.
+	bool addSensormeterTarget(const String &ip);
+	void removeSensormeterTarget(size_t i);
 
 	size_t pingTargetCount() const;
 	String pingTargetIp(size_t i) const;
@@ -56,6 +68,7 @@ private:
 	void load();
 	void save();
 	void savePingTargets();
+	void saveSensormeterTargets();
 
 	Preferences prefs;
 	// Nicht mutable: Take/Give aendern nur den internen FreeRTOS-Zustand des
@@ -68,7 +81,8 @@ private:
 	DataSource staticSource_ = DataSource::Dht11;
 	uint8_t brightnessPercent_ = kBrightnessDefaultPercent;
 
-	String sensormeterIp_;
+	String sensormeterTargets_[kMaxSensormeterTargets];
+	size_t sensormeterTargetCount_ = 0;
 	String sensormeterCommunity_ = "public";
 
 	String pingTargets_[kMaxPingTargets];
