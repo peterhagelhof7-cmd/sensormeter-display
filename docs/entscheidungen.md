@@ -1,5 +1,17 @@
 # Entscheidungsprotokoll — Sensormeter Display
 
+## RGB-Status-LED leuchtete dauerhaft trotz "aus"
+
+### Bug gefunden und behoben: LED-Polaritaet umgekehrt (gemeinsame Anode statt Kathode)
+Nutzer meldete, die RGB-Status-LED leuchte durchgehend, obwohl kein
+Ping-Alarm aktiv war. `LedManager` ging bisher von gemeinsamer Kathode aus
+(HIGH=an, siehe fruehere, im Code selbst als unverifiziert markierte
+Annahme aus P7/P8). Tatsaechlich gemeinsame Anode (LOW=an) - im
+vermeintlichen "aus"-Zustand (alle drei Pins LOW) waren dadurch alle drei
+Farbkanaele gleichzeitig an. Behoben durch Invertieren der Pegel in
+`LedManager::setColor()`; am Geraet verifiziert (LED jetzt tatsaechlich aus
+ohne aktiven Alarm).
+
 ## Farbtest (Rot/Gelb/Blau/Gruen/Weiss): echte Ursache gefunden, RGB/BGR-Diagnose war eine Sackgasse
 
 ### Korrektur zum Abschnitt "TFT_RGB_ORDER falsch konfiguriert" weiter unten

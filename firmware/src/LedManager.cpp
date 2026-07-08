@@ -8,9 +8,13 @@ void LedManager::begin() {
 }
 
 void LedManager::setColor(bool r, bool g, bool b) {
-	digitalWrite(LED_R_PIN, r ? HIGH : LOW);
-	digitalWrite(LED_G_PIN, g ? HIGH : LOW);
-	digitalWrite(LED_B_PIN, b ? HIGH : LOW);
+	// Hardware-Befund: Polaritaet war umgekehrt zur urspruenglichen Annahme
+	// (gemeinsame Kathode, HIGH=an) - die LED leuchtete dauerhaft im
+	// vermeintlichen "aus"-Zustand. Tatsaechlich gemeinsame Anode (LOW=an),
+	// daher hier invertiert. Siehe docs/entscheidungen.md.
+	digitalWrite(LED_R_PIN, r ? LOW : HIGH);
+	digitalWrite(LED_G_PIN, g ? LOW : HIGH);
+	digitalWrite(LED_B_PIN, b ? LOW : HIGH);
 }
 
 void LedManager::update(bool alertActive) {
