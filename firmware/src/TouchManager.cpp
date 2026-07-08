@@ -92,30 +92,45 @@ void TouchManager::waitForTap(int32_t &rawX, int32_t &rawY) const {
 	}
 }
 
+namespace {
+struct CalibTarget {
+	int16_t x, y;
+	const char *label;
+};
+} // namespace
+
 void TouchManager::runCalibration(DisplayManager &display) {
 	TFT_eSPI &tft = display.raw();
 
-	tft.fillScreen(TFT_WHITE);
-	tft.setTextColor(TFT_BLACK, TFT_WHITE);
-	tft.setTextDatum(TL_DATUM);
-	tft.setTextFont(2);
-	tft.drawString("Kalibrierung: oben-links antippen", 10, 10);
-	tft.fillCircle(20, 20, 4, TFT_BLACK);
+	// Vier Ecken, aber bewusst um kCalibMarginX/Y nach innen versetzt statt
+	// exakt auf der Kante - siehe Kommentar in TouchManager.h.
+	const CalibTarget targets[4] = {
+		{kCalibMarginX, kCalibMarginY, "oben-links"},
+		{static_cast<int16_t>(DisplayManager::kScreenWidth - kCalibMarginX), kCalibMarginY, "oben-rechts"},
+		{kCalibMarginX, static_cast<int16_t>(DisplayManager::kScreenHeight - kCalibMarginY), "unten-links"},
+		{static_cast<int16_t>(DisplayManager::kScreenWidth - kCalibMarginX),
+		 static_cast<int16_t>(DisplayManager::kScreenHeight - kCalibMarginY), "unten-rechts"},
+	};
 
-	int32_t rawX = 0, rawY = 0;
-	waitForTap(rawX, rawY);
-	int32_t topLeftX = rawX, topLeftY = rawY;
+	int32_t rawX[4], rawY[4];
+	for (int i = 0; i < 4; i++) {
+		tft.fillScreen(TFT_WHITE);
+		tft.setTextColor(TFT_BLACK, TFT_WHITE);
+		tft.setTextDatum(TL_DATUM);
+		tft.setTextFont(2);
+		tft.drawString(String("Kalibrierung: ") + targets[i].label + " antippen", 10, 10);
+		tft.fillCircle(targets[i].x, targets[i].y, 4, TFT_BLACK);
 
-	tft.fillScreen(TFT_WHITE);
-	tft.drawString("Kalibrierung: unten-rechts antippen", 10, 10);
-	tft.fillCircle(DisplayManager::kScreenWidth - 20, DisplayManager::kScreenHeight - 20, 4, TFT_BLACK);
+		waitForTap(rawX[i], rawY[i]);
+	}
 
-	waitForTap(rawX, rawY);
-
-	xMin = topLeftX;
-	yMin = topLeftY;
-	xMax = rawX;
-	yMax = rawY;
+	// xMin/xMax bzw. yMin/yMax je aus zwei Tipps gemittelt (z.B. xMin aus
+	// oben-links + unten-links) - gleicht einen einzelnen ungenauen Tipp
+	// besser aus als eine Zwei-Punkt-Kalibrierung.
+	xMin = (rawX[0] + rawX[2]) / 2; // oben-links + unten-links
+	xMax = (rawX[1] + rawX[3]) / 2; // oben-rechts + unten-rechts
+	yMin = (rawY[0] + rawY[1]) / 2; // oben-links + oben-rechts
+	yMax = (rawY[2] + rawY[3]) / 2; // unten-links + unten-rechts
 	saveCalibration();
 
 	tft.fillScreen(TFT_WHITE);
@@ -123,13 +138,19 @@ void TouchManager::runCalibration(DisplayManager &display) {
 	delay(800);
 }
 
-int16_t TouchManager::mapAxis(int32_t raw, int32_t rawMin, int32_t rawMax, int16_t outMax) const {
+int16_t TouchManager::mapAxis(int32_t raw, int32_t rawMin, int32_t rawMax, int16_t margin,
+                               int16_t screenSize) const {
 	if (rawMax == rawMin) {
 		return 0;
 	}
-	int32_t v = (raw - rawMin) * outMax / (rawMax - rawMin);
+	// rawMin/rawMax entsprechen den bei der Kalibrierung angetippten,
+	// nach innen versetzten Zielen (margin..screenSize-1-margin) - hier
+	// linear auf den vollen Bildschirmbereich (0..screenSize-1) extrapoliert,
+	// damit Tipps bis an die Kante trotzdem 0 bzw. screenSize-1 ergeben.
+	int32_t span = screenSize - 1 - 2 * margin;
+	int32_t v = margin + (raw - rawMin) * span / (rawMax - rawMin);
 	if (v < 0) v = 0;
-	if (v > outMax) v = outMax;
+	if (v > screenSize - 1) v = screenSize - 1;
 	return static_cast<int16_t>(v);
 }
 
@@ -138,7 +159,7 @@ bool TouchManager::read(int16_t &screenX, int16_t &screenY) {
 	if (!readRaw(rawX, rawY)) {
 		return false;
 	}
-	screenX = mapAxis(rawX, xMin, xMax, DisplayManager::kScreenWidth - 1);
-	screenY = mapAxis(rawY, yMin, yMax, DisplayManager::kScreenHeight - 1);
+	screenX = mapAxis(rawX, xMin, xMax, kCalibMarginX, DisplayManager::kScreenWidth);
+	screenY = mapAxis(rawY, yMin, yMax, kCalibMarginY, DisplayManager::kScreenHeight);
 	return true;
 }

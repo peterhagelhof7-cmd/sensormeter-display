@@ -14,14 +14,24 @@
 // gespeicherte Daten muss runCalibration() vor der ersten Nutzung laufen.
 //
 // Protokoll-Timing ist Standard-XPT2046 (Kommandobyte MSB-first, 12-Bit-
-// Ergebnis), aber an diesem konkreten Board noch nicht auf echter Hardware
-// verifiziert - siehe docs/entscheidungen.md.
+// Ergebnis) - auf echter Hardware verifiziert (siehe docs/entscheidungen.md).
 class TouchManager {
 public:
+	// Kalibrierziele liegen bewusst nicht auf den Bildschirmkanten selbst,
+	// sondern etwas nach innen versetzt (Feedback nach erstem Hardware-Test:
+	// Ecken exakt auf der Kante waren schlecht/ungenau antippbar). Die
+	// tatsaechlichen Bildschirmkanten werden trotzdem ueber lineare
+	// Extrapolation abgedeckt, siehe mapAxis().
+	static constexpr int16_t kCalibMarginX = 40;
+	static constexpr int16_t kCalibMarginY = 32;
+
 	void begin();
 
 	bool isCalibrated() const { return calibrated; }
-	// Zwei-Punkt-Kalibrierung: Ziel oben-links, dann unten-rechts antippen.
+	// Vier-Punkt-Kalibrierung (alle vier Ecken antippen, siehe kCalibMarginX/Y):
+	// robuster gegen einen einzelnen ungenauen Tipp als die fruehere
+	// Zwei-Punkt-Variante, da xMin/xMax/yMin/yMax jeweils aus zwei Tipps
+	// gemittelt werden.
 	void runCalibration(DisplayManager &display);
 
 	// true, wenn aktuell beruehrt; screenX/screenY in Bildschirmkoordinaten
@@ -31,7 +41,7 @@ public:
 private:
 	void loadCalibration();
 	void saveCalibration();
-	int16_t mapAxis(int32_t raw, int32_t rawMin, int32_t rawMax, int16_t outMax) const;
+	int16_t mapAxis(int32_t raw, int32_t rawMin, int32_t rawMax, int16_t margin, int16_t screenSize) const;
 
 	bool touched() const;
 	uint16_t readChannel(uint8_t command) const;
