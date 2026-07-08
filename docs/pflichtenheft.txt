@@ -1,0 +1,185 @@
+
+PFLICHTENHEFT – SENSORMETER DISPLAY (HW-458B)
+
+1. SYSTEMARCHITEKTUR
+
+Das System basiert auf einem ESP32 (ESP-WROOM-32, Board HW-458B) mit
+folgenden Software-Komponenten:
+
+- Arduino Framework (PlatformIO, Board esp32dev)
+- TFT-Treiber für ST7789P3 (4-Draht-SPI, 240x320)
+- Touch-Treiber für den resistiven 4-Draht-Touch-Controller (TP_CLK/TP_CS/
+  TP_DIN/TP_OUT/TP_IRQ) inkl. Kalibrierlogik
+- LittleFS Dateisystem
+- WLAN-Client (ESP32 WiFi)
+- NTP-Client
+- SNMP-Client (v1, GET-Requests gegen das Sensormeter-Projekt)
+- ICMP-Ping-Client
+
+Architekturstil analog zum Sensormeter-Projekt (WT32-ETH01): ein
+kooperativer Hauptloop mit Manager-Klassen statt echter FreeRTOS-Tasks,
+zentrale Zustandshaltung über einen DataManager.
+
+------------------------------------------------------------
+
+2. SOFTWAREMODULE
+
+2.1 DataManager
+Zentrale, gekapselte Zustandshaltung: aktuelle Sensorwerte, WLAN-Status,
+gewählte Betriebsart/Datenquelle, Ping-Status je Ziel, Sensormeter-Werte.
+
+2.2 DisplayManager
+- Initialisierung ST7789P3, Rendering aller Bildschirme
+- 7-Segment-artige Systemschrift, Grunddarstellung weiß/schwarz
+- Statusleiste (Zahnrad, WLAN-Balken, DHT11, Uhrzeit), max. 15 % der
+  langen Kante
+- Umschalten Hintergrundfarbe auf rot bei anhaltendem Ping-Fehler
+
+2.3 TouchManager
+- Rohwert-Erfassung über TP_-Pins
+- Kalibrierroutine (Erststart bzw. manuell aus Systemeinstellungen),
+  Kalibrierdaten in Flash
+- Umrechnung Rohkoordinaten → Bildschirmkoordinaten
+- Touch-Zonen-Mapping für Menüs und Snake (oben/unten/links/rechts-Drittel)
+
+2.4 WlanManager
+- WLAN-Scan, Ergebnisliste
+- Verbindungsaufbau mit ausgewähltem SSID/PSK
+- Auto-Connect beim Start, wenn SSID/PSK in Flash vorhanden
+- Empfangsstärke (RSSI) für Statusleisten-Symbol
+
+2.5 FlashManager
+- LittleFS-Zugriff, Konfigurationsdatei (Settings: Betriebsart,
+  Slide-Intervall, Static-Datenquelle, Helligkeit, Ping-Zielliste,
+  Sensormeter-Zieladresse + Community)
+- WLAN-Zugangsdaten
+- Touch-Kalibrierdaten
+- history.csv (DHT11-Ringpuffer)
+- Snake-Highscore
+
+2.6 SensorManager (DHT11)
+- Polling alle 5 Sekunden
+- Plausibilitätsprüfung, Übergabe an DataManager/GraphManager
+
+2.7 GraphManager
+- Ringpuffer 24 Einträge à 30 Minuten (12h) in history.csv
+- Laden der Historie beim Boot
+- Rendering: Temperatur rot/linke Achse, Luftfeuchte blau/rechte Achse,
+  Auflösung volle °C / volle %
+
+2.8 TimeManager
+- NTP-Sync gegen de.pool.ntp.org
+- Deutsche Zeitzone inkl. Sommerzeit (CET/CEST)
+- Formatierung HH:MM (24h), Wochentag (deutsch), Datum DD.MM.JJJJ
+
+2.9 SensormeterClient (SNMP)
+- SNMP-v1-GET-Client gegen konfiguriertes Zielgerät
+- Abfrage alle 30 Sekunden, sofern Zieladresse konfiguriert
+- OID-Struktur gemäß lastenheft.txt Abschnitt 7.3
+  (.1.3.6.1.4.1.99999.3/.4 für Sensor 1/2, .2 für Netzwerkinfo optional)
+- Fehlerkennzeichnung bei Timeout (letzten Wert markiert weiterzeigen
+  oder "--")
+
+2.10 PingManager
+- Kontinuierlicher Ping an google.com, gleitender Durchschnitt der
+  letzten 5 Antwortzeiten
+- Bis zu 5 zusätzliche konfigurierbare Ziele (IP-Liste aus FlashManager)
+- Status je Ziel: OK (grün) / Fehler (rot)
+- Fehlerzähler: bei >1 Minute Fehlschlag an google.com → Trigger an
+  LedManager und DisplayManager (rote Anzeige)
+
+2.11 SettingsManager
+- UI-Logik für Zahnrad-Menü: Slide/Static/Snake/Systemeinstellungen
+- Helligkeitsregelung (Default 60 %), Schreiben in FlashManager
+- WLAN-Neukonfiguration (ruft WlanManager-Onboarding erneut auf)
+- Ping-Ziel-Verwaltung (Anzahl per Dropdown, IP-Eingabe je Ziel)
+
+2.12 SnakeGame
+- Spiellogik, Touch-Zonen-Steuerung (Drittel-Mapping über TouchManager)
+- Game-Over: Punktestand 20s einblenden, danach zurück zu Settings
+- Highscore-Persistenz über FlashManager
+
+2.13 LedManager
+- Ansteuerung RGB-Status-LED (IO17/IO4/IO16)
+- Rot blinkend bei anhaltendem Ping-Fehler (siehe 2.10)
+
+------------------------------------------------------------
+
+3. DATENSPEICHERUNG (LittleFS)
+
+3.1 settings.json (o.ä.)
+- Betriebsart, Slide-Intervall, Static-Datenquelle, Helligkeit
+- Ping-Zielliste (bis zu 5 IPs)
+- Sensormeter-Zieladresse + SNMP-Community
+- Snake-Highscore
+
+3.2 wifi.json (o.ä.)
+- SSID, PSK
+
+3.3 calibration.dat
+- Touch-Kalibrierkoeffizienten
+
+3.4 history.csv
+- Ringpuffer, 24 Einträge, je: Zeitstempel, Temperatur (°C), Luftfeuchte (%)
+- Speicherintervall 30 Minuten, wird beim Boot vollständig geladen
+
+------------------------------------------------------------
+
+4. STARTUP FLOW
+
+BOOT →
+  Display/Touch-Hardware initialisieren →
+  Konfiguration aus LittleFS laden (Settings, WLAN, Kalibrierung,
+  history.csv) →
+  IF keine Kalibrierdaten vorhanden → Touch-Kalibrierroutine →
+  IF keine WLAN-Zugangsdaten vorhanden → WLAN-Onboarding (Scan, Auswahl,
+  PSK-Eingabe) →
+  ELSE → automatischer WLAN-Verbindungsaufbau →
+  NTP-Sync anstoßen (nicht blockierend) →
+  Normalbetrieb gemäß gespeicherter Betriebsart
+
+------------------------------------------------------------
+
+5. FEHLERBEHANDLUNG
+
+5.1 DHT11
+- Fehlerhafter Read: letzten gültigen Wert beibehalten oder "--"
+  anzeigen, kein Neustart/Absturz
+
+5.2 WLAN
+- Keine Verbindung: Statusleisten-Symbol blinkt
+- Datenquellen, die Netzwerk benötigen (Uhrzeit/NTP, Sensormeter, Ping),
+  zeigen entsprechend gekennzeichnete Fehl-/Wartezustände
+
+5.3 Sensormeter (SNMP)
+- Timeout/keine Antwort: Anzeige "--" bzw. Fehlerkennzeichnung,
+  kein Blockieren des restlichen Systems
+
+5.4 Ping
+- Fehlschlag >1 Minute (google.com): LED blinkt rot, Display-Hintergrund
+  wechselt auf rot (siehe lastenheft.txt Abschnitt 9)
+- Einzelne konfigurierte Zusatzziele: nur zeilenweise rot markiert,
+  ohne globale Fehlerreaktion
+
+------------------------------------------------------------
+
+6. SPEICHERRAHMEN (ORIENTIERUNG)
+
+Flash: 32 Mbit gesamt (Board-Vorgabe)
+- Firmware-Partition: analog zu vergleichbaren ESP32-Projekten
+- LittleFS: Settings/Kalibrierung (klein) + history.csv (24 Zeilen, sehr
+  klein) → unkritisch für den verfügbaren Speicher
+
+RAM: 520 KB SRAM (Board-Vorgabe)
+- Größter Verbraucher erwartet: Display-Framebuffer/-Puffer je nach
+  gewählter Grafikbibliothek — bei Auswahl der Bibliothek gegen
+  verfügbares RAM prüfen
+
+------------------------------------------------------------
+
+7. ERWEITERBARKEIT
+
+- Weitere Datenquellen grundsätzlich nach demselben Schema ergänzbar
+  (Anzeige-Screen + Eintrag in SettingsManager/Slide-Rotation)
+- Sensormeter PRO (zweiter externer Sensor) bereits über die bestehende
+  OID-Struktur (.4.x) abbildbar, sobald gewünscht
