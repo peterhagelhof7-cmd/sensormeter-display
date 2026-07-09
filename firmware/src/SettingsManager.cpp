@@ -35,6 +35,38 @@ void SettingsManager::load() {
 	}
 	deviceName_ = prefs.getString("name", "Sensormeter Display");
 	webPassword_ = prefs.getString("webPw", "admin");
+
+	dhtTempOffsetC_ = prefs.getShort("dTOff", 0);
+	dhtHumOffsetPct_ = prefs.getShort("dHOff", 0);
+
+	dhtTempMinC_ = prefs.getShort("dTMin", kThresholdDisabled);
+	dhtTempMaxC_ = prefs.getShort("dTMax", kThresholdDisabled);
+	dhtHumMinPct_ = prefs.getShort("dHMin", kThresholdDisabled);
+	dhtHumMaxPct_ = prefs.getShort("dHMax", kThresholdDisabled);
+
+	// Alle kMax-Slots laden, nicht nur die aktuell belegten - so behalten
+	// auch (noch) unbenutzte Slots ihren zuletzt gespeicherten Zustand
+	// (Default: kThresholdDisabled/0), falls spaeter per addXTarget() ein
+	// neues Ziel genau in diesem Slot-Index landet.
+	for (size_t i = 0; i < kMaxSensormeterTargets; i++) {
+		for (uint8_t s = 0; s < kMaxSensorsPerTarget; s++) {
+			char key[8];
+			snprintf(key, sizeof(key), "smTn%u%u", static_cast<unsigned>(i), static_cast<unsigned>(s));
+			smTempMin_[i][s] = prefs.getShort(key, kThresholdDisabled);
+			snprintf(key, sizeof(key), "smTx%u%u", static_cast<unsigned>(i), static_cast<unsigned>(s));
+			smTempMax_[i][s] = prefs.getShort(key, kThresholdDisabled);
+			snprintf(key, sizeof(key), "smHn%u%u", static_cast<unsigned>(i), static_cast<unsigned>(s));
+			smHumMin_[i][s] = prefs.getShort(key, kThresholdDisabled);
+			snprintf(key, sizeof(key), "smHx%u%u", static_cast<unsigned>(i), static_cast<unsigned>(s));
+			smHumMax_[i][s] = prefs.getShort(key, kThresholdDisabled);
+		}
+	}
+	for (size_t i = 0; i < kMaxPingTargets; i++) {
+		char key[8];
+		snprintf(key, sizeof(key), "pMax%u", static_cast<unsigned>(i));
+		pingMaxMs_[i] = prefs.getUShort(key, 0);
+	}
+	googlePingMaxMs_ = prefs.getUShort("pMaxG", 0);
 	prefs.end();
 
 	if (slideIntervalSec_ < kSlideIntervalMinSec || slideIntervalSec_ > kSlideIntervalMaxSec) {
@@ -58,6 +90,8 @@ void SettingsManager::save() {
 	prefs.putString("smCommunity", sensormeterCommunity_);
 	prefs.putString("name", deviceName_);
 	prefs.putString("webPw", webPassword_);
+	prefs.putShort("dTOff", dhtTempOffsetC_);
+	prefs.putShort("dHOff", dhtHumOffsetPct_);
 	prefs.end();
 }
 
@@ -80,6 +114,44 @@ void SettingsManager::savePingTargets() {
 		snprintf(key, sizeof(key), "ping%u", static_cast<unsigned>(i));
 		prefs.putString(key, pingTargets_[i]);
 	}
+	prefs.end();
+}
+
+void SettingsManager::saveDhtThresholds() {
+	prefs.begin("settings", false);
+	prefs.putShort("dTMin", dhtTempMinC_);
+	prefs.putShort("dTMax", dhtTempMaxC_);
+	prefs.putShort("dHMin", dhtHumMinPct_);
+	prefs.putShort("dHMax", dhtHumMaxPct_);
+	prefs.end();
+}
+
+void SettingsManager::saveSensormeterThresholds() {
+	prefs.begin("settings", false);
+	for (size_t i = 0; i < kMaxSensormeterTargets; i++) {
+		for (uint8_t s = 0; s < kMaxSensorsPerTarget; s++) {
+			char key[8];
+			snprintf(key, sizeof(key), "smTn%u%u", static_cast<unsigned>(i), static_cast<unsigned>(s));
+			prefs.putShort(key, smTempMin_[i][s]);
+			snprintf(key, sizeof(key), "smTx%u%u", static_cast<unsigned>(i), static_cast<unsigned>(s));
+			prefs.putShort(key, smTempMax_[i][s]);
+			snprintf(key, sizeof(key), "smHn%u%u", static_cast<unsigned>(i), static_cast<unsigned>(s));
+			prefs.putShort(key, smHumMin_[i][s]);
+			snprintf(key, sizeof(key), "smHx%u%u", static_cast<unsigned>(i), static_cast<unsigned>(s));
+			prefs.putShort(key, smHumMax_[i][s]);
+		}
+	}
+	prefs.end();
+}
+
+void SettingsManager::savePingThresholds() {
+	prefs.begin("settings", false);
+	for (size_t i = 0; i < kMaxPingTargets; i++) {
+		char key[8];
+		snprintf(key, sizeof(key), "pMax%u", static_cast<unsigned>(i));
+		prefs.putUShort(key, pingMaxMs_[i]);
+	}
+	prefs.putUShort("pMaxG", googlePingMaxMs_);
 	prefs.end();
 }
 
@@ -137,6 +209,28 @@ void SettingsManager::setBrightnessPercent(uint8_t percent) {
 	xSemaphoreGive(mutex_);
 }
 
+int16_t SettingsManager::dhtTempOffsetC() const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	int16_t v = dhtTempOffsetC_;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+int16_t SettingsManager::dhtHumOffsetPct() const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	int16_t v = dhtHumOffsetPct_;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+void SettingsManager::setDhtOffsets(int16_t tempOffsetC, int16_t humOffsetPct) {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	dhtTempOffsetC_ = tempOffsetC;
+	dhtHumOffsetPct_ = humOffsetPct;
+	save();
+	xSemaphoreGive(mutex_);
+}
+
 String SettingsManager::sensormeterCommunity() const {
 	xSemaphoreTake(mutex_, portMAX_DELAY);
 	String v = sensormeterCommunity_;
@@ -185,8 +279,34 @@ void SettingsManager::removeSensormeterTarget(size_t i) {
 	if (i < sensormeterTargetCount_ && sensormeterTargetCount_ > 1) {
 		for (size_t j = i; j + 1 < sensormeterTargetCount_; j++) {
 			sensormeterTargets_[j] = sensormeterTargets_[j + 1];
+			for (uint8_t s = 0; s < kMaxSensorsPerTarget; s++) {
+				smTempMin_[j][s] = smTempMin_[j + 1][s];
+				smTempMax_[j][s] = smTempMax_[j + 1][s];
+				smHumMin_[j][s] = smHumMin_[j + 1][s];
+				smHumMax_[j][s] = smHumMax_[j + 1][s];
+			}
 		}
 		sensormeterTargetCount_--;
+		// Der jetzt freigewordene letzte Slot muss auf "kein Schwellwert"
+		// zurueckgesetzt werden - sonst wuerde ein spaeter dort neu
+		// hinzugefuegtes Ziel faelschlich die Schwellwerte des entfernten
+		// Ziels erben (Slot-Index wird bei addSensormeterTarget() wiederverwendet).
+		for (uint8_t s = 0; s < kMaxSensorsPerTarget; s++) {
+			smTempMin_[sensormeterTargetCount_][s] = kThresholdDisabled;
+			smTempMax_[sensormeterTargetCount_][s] = kThresholdDisabled;
+			smHumMin_[sensormeterTargetCount_][s] = kThresholdDisabled;
+			smHumMax_[sensormeterTargetCount_][s] = kThresholdDisabled;
+		}
+		saveSensormeterTargets();
+		saveSensormeterThresholds();
+	}
+	xSemaphoreGive(mutex_);
+}
+
+void SettingsManager::setSensormeterTargetIp(size_t i, const String &ip) {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	if (i < sensormeterTargetCount_ && !ip.isEmpty()) {
+		sensormeterTargets_[i] = ip;
 		saveSensormeterTargets();
 	}
 	xSemaphoreGive(mutex_);
@@ -223,9 +343,15 @@ void SettingsManager::removePingTarget(size_t i) {
 	if (i < pingTargetCount_) {
 		for (size_t j = i; j + 1 < pingTargetCount_; j++) {
 			pingTargets_[j] = pingTargets_[j + 1];
+			pingMaxMs_[j] = pingMaxMs_[j + 1];
 		}
 		pingTargetCount_--;
+		// Siehe Kommentar in removeSensormeterTarget() - freigewordenen Slot
+		// zuruecksetzen, damit ein spaeter wiederverwendeter Slot nicht den
+		// Schwellwert des entfernten Ziels erbt.
+		pingMaxMs_[pingTargetCount_] = 0;
 		savePingTargets();
+		savePingThresholds();
 	}
 	xSemaphoreGive(mutex_);
 }
@@ -255,5 +381,122 @@ void SettingsManager::setWebPassword(const String &password) {
 	xSemaphoreTake(mutex_, portMAX_DELAY);
 	webPassword_ = password.isEmpty() ? "admin" : password;
 	save();
+	xSemaphoreGive(mutex_);
+}
+
+int16_t SettingsManager::dhtTempMinC() const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	int16_t v = dhtTempMinC_;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+int16_t SettingsManager::dhtTempMaxC() const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	int16_t v = dhtTempMaxC_;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+int16_t SettingsManager::dhtHumMinPct() const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	int16_t v = dhtHumMinPct_;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+int16_t SettingsManager::dhtHumMaxPct() const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	int16_t v = dhtHumMaxPct_;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+void SettingsManager::setDhtThresholds(int16_t tempMinC, int16_t tempMaxC, int16_t humMinPct, int16_t humMaxPct) {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	dhtTempMinC_ = tempMinC;
+	dhtTempMaxC_ = tempMaxC;
+	dhtHumMinPct_ = humMinPct;
+	dhtHumMaxPct_ = humMaxPct;
+	saveDhtThresholds();
+	xSemaphoreGive(mutex_);
+}
+
+int16_t SettingsManager::sensormeterTempMinC(size_t targetIdx, uint8_t sensorIdx) const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	int16_t v = (targetIdx < kMaxSensormeterTargets && sensorIdx < kMaxSensorsPerTarget)
+	                ? smTempMin_[targetIdx][sensorIdx]
+	                : kThresholdDisabled;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+int16_t SettingsManager::sensormeterTempMaxC(size_t targetIdx, uint8_t sensorIdx) const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	int16_t v = (targetIdx < kMaxSensormeterTargets && sensorIdx < kMaxSensorsPerTarget)
+	                ? smTempMax_[targetIdx][sensorIdx]
+	                : kThresholdDisabled;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+int16_t SettingsManager::sensormeterHumMinPct(size_t targetIdx, uint8_t sensorIdx) const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	int16_t v = (targetIdx < kMaxSensormeterTargets && sensorIdx < kMaxSensorsPerTarget)
+	                ? smHumMin_[targetIdx][sensorIdx]
+	                : kThresholdDisabled;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+int16_t SettingsManager::sensormeterHumMaxPct(size_t targetIdx, uint8_t sensorIdx) const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	int16_t v = (targetIdx < kMaxSensormeterTargets && sensorIdx < kMaxSensorsPerTarget)
+	                ? smHumMax_[targetIdx][sensorIdx]
+	                : kThresholdDisabled;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+void SettingsManager::setSensormeterThresholds(size_t targetIdx, uint8_t sensorIdx, int16_t tempMinC,
+                                                int16_t tempMaxC, int16_t humMinPct, int16_t humMaxPct) {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	if (targetIdx < kMaxSensormeterTargets && sensorIdx < kMaxSensorsPerTarget) {
+		smTempMin_[targetIdx][sensorIdx] = tempMinC;
+		smTempMax_[targetIdx][sensorIdx] = tempMaxC;
+		smHumMin_[targetIdx][sensorIdx] = humMinPct;
+		smHumMax_[targetIdx][sensorIdx] = humMaxPct;
+		saveSensormeterThresholds();
+	}
+	xSemaphoreGive(mutex_);
+}
+
+uint16_t SettingsManager::pingMaxLatencyMs(size_t i) const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	uint16_t v = (i < kMaxPingTargets) ? pingMaxMs_[i] : 0;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+void SettingsManager::setPingMaxLatencyMs(size_t i, uint16_t ms) {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	if (i < kMaxPingTargets) {
+		pingMaxMs_[i] = ms;
+		savePingThresholds();
+	}
+	xSemaphoreGive(mutex_);
+}
+
+uint16_t SettingsManager::googlePingMaxLatencyMs() const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	uint16_t v = googlePingMaxMs_;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+void SettingsManager::setGooglePingMaxLatencyMs(uint16_t ms) {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	googlePingMaxMs_ = ms;
+	savePingThresholds();
 	xSemaphoreGive(mutex_);
 }

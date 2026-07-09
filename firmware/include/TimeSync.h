@@ -22,4 +22,9 @@ String formatTime();
 // "Wochentag, DD.MM.JJJJ" (deutsch), leerer String falls !isValid().
 String formatDate();
 
+// "DD.MM.YY HH:MM" des letzten erfolgreichen NTP-Sync-Ereignisses (nicht
+// der aktuellen Systemzeit!) - ueber den SNTP-Callback erfasst, siehe
+// begin(). Leerer String, falls noch nie erfolgreich synchronisiert.
+String formatLastSync();
+
 } // namespace TimeSync

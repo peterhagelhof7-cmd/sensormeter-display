@@ -1,5 +1,7 @@
 #include "PingView.h"
 
+#include <math.h>
+
 void PingView::drawAverage(DisplayManager &display, const PingManager &ping, int16_t contentTop,
                             int16_t contentBottom, uint16_t bgColor) {
 	bool hasReading = ping.hasGoogleReading();
@@ -44,6 +46,8 @@ void PingView::drawTargetList(DisplayManager &display, const PingManager &ping, 
 		signature += '|';
 		signature += ping.targetChecked(i) ? (ping.targetOk(i) ? 'K' : 'F') : '?';
 		signature += ping.targetIp(i);
+		signature += '@';
+		signature += ping.targetHasLatency(i) ? String(static_cast<int>(lroundf(ping.targetLatencyMs(i)))) : String("-");
 	}
 	bool changed = !everDrawnList || signature != lastListSignature || bgColor != lastListBgColor;
 	if (!changed) {
@@ -82,6 +86,9 @@ void PingView::drawTargetList(DisplayManager &display, const PingManager &ping, 
 		tft.setTextDatum(ML_DATUM);
 		tft.setTextFont(4);
 		String status = !checked ? "..." : (ok ? "OK" : "Fehler");
+		if (ping.targetHasLatency(i)) {
+			status += "  " + String(static_cast<int>(lroundf(ping.targetLatencyMs(i)))) + "ms";
+		}
 		tft.drawString(ping.targetIp(i) + "   " + status, 12, y + rowH / 2);
 	}
 	tft.setTextColor(TFT_BLACK, bgColor);

@@ -7,32 +7,55 @@
 #include "BacklightManager.h"
 #include "OtaManager.h"
 #include "WlanManager.h"
+#include "SensormeterManager.h"
+#include "SensorManager.h"
+#include "PingManager.h"
+#include "GraphManager.h"
 
-// Schlanker Einstellungs-Webserver (lastenheft.txt Abschnitt 8,
-// Zusatzfunktion ueber die urspruengliche Beschreibung.txt hinaus): Name,
-// Betriebsmodus, Helligkeit, Sensormeter-Ziel, Ping-Ziele setzen, plus
-// lokales OTA-Update per .bin-Upload. Async (ESPAsyncWebServer/AsyncTCP),
-// damit HTTP-Anfragen den Hauptloop (Touch, Sensor-Polling, Ping, Snake)
-// nicht blockieren - siehe docs/entscheidungen.md.
-//
-// Kein REST-API/JSON noetig (anders als das Sensormeter-Projekt) - hier
-// geht es nur um ein Einstellungsformular, kein Anzeige-Dashboard.
+// Webserver mit zwei Seiten (siehe docs/entscheidungen.md):
+// - "/" : oeffentliches, NICHT passwortgeschuetztes Status-Dashboard
+//   (Nutzerwunsch: alle aktuellen Werte auf einen Blick, Auto-Refresh 30s,
+//   kein Login noetig) - rein lesend, keine Formulare.
+// - "/settings" : der bisherige Einstellungs-Bereich (Name, Betriebsmodus,
+//   Helligkeit, Sensormeter-/Ping-Ziele, Warnschwellwerte, Netzwerk,
+//   OTA-Update), weiterhin per HTTP-Basic-Auth geschuetzt.
+// Async (ESPAsyncWebServer/AsyncTCP), damit HTTP-Anfragen den Hauptloop
+// (Touch, Sensor-Polling, Ping, Snake) nicht blockieren.
 class WebServerManager {
 public:
-	WebServerManager(SettingsManager &settings, BacklightManager &backlight, OtaManager &ota, WlanManager &wlan);
+	// sensormeterManager/sensor/pingManager/graph: nur lesend -
+	// sensormeterManager fuer die PRO-Sensor-Erkennung in der Schwellwert-
+	// Tabelle UND fuer die Sensormeter-Anzeige im Dashboard; sensor/
+	// pingManager/graph ausschliesslich fuer die aktuellen Werte bzw. den
+	// SVG-Verlaufsgraph im Dashboard.
+	WebServerManager(SettingsManager &settings, BacklightManager &backlight, OtaManager &ota, WlanManager &wlan,
+	                  const SensormeterManager &sensormeterManager, const SensorManager &sensor,
+	                  const PingManager &pingManager, const GraphManager &graph);
 
 	void begin();
 
 private:
 	bool checkAuth(AsyncWebServerRequest *request) const;
-	String buildPage() const;
+	// saved: zeigt einen kurzen "Gespeichert"-Hinweis oben auf der Seite -
+	// gesetzt, wenn der aufrufende Redirect "?saved=1" mitgibt.
+	String buildSettingsPage(bool saved) const;
+	String buildDashboardPage() const;
+	String sharedCss() const;
+	// linkHref leer = kein Link-Badge (nicht gebraucht, wenn eine Seite
+	// eh nur die andere Richtung anbieten wuerde).
+	String bannerHtml(const String &eyebrow, const String &subLine, const String &linkHref,
+	                   const String &linkLabel) const;
 	String dataSourceOptions(DataSource selected) const;
+	String dhtGraphSvg() const;
+	String wifiBarsHtml(int8_t bars) const;
 
 	void handleSave(AsyncWebServerRequest *request);
 	void handlePingAdd(AsyncWebServerRequest *request);
 	void handlePingRemove(AsyncWebServerRequest *request);
 	void handleSensormeterAdd(AsyncWebServerRequest *request);
 	void handleSensormeterRemove(AsyncWebServerRequest *request);
+	void handleSensormeterThresholds(AsyncWebServerRequest *request);
+	void handlePingThreshold(AsyncWebServerRequest *request);
 	void handleNetworkSave(AsyncWebServerRequest *request);
 	void handleOtaUploadChunk(AsyncWebServerRequest *request, const String &filename, size_t index,
 	                           uint8_t *data, size_t len, bool final);
@@ -42,6 +65,10 @@ private:
 	BacklightManager &backlight_;
 	OtaManager &ota_;
 	WlanManager &wlan_;
+	const SensormeterManager &sensormeterManager_;
+	const SensorManager &sensor_;
+	const PingManager &pingManager_;
+	const GraphManager &graph_;
 	AsyncWebServer server_{80};
 
 	bool otaInProgress_ = false;

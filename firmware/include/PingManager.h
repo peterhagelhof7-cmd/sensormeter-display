@@ -28,6 +28,11 @@ public:
 	String targetIp(size_t i) const { return (i < numTargets) ? targets[i].ip : String(); }
 	bool targetOk(size_t i) const { return (i < numTargets) ? targets[i].ok : false; }
 	bool targetChecked(size_t i) const { return (i < numTargets) ? targets[i].checked : false; }
+	// Letzte erfolgreich gemessene Latenz (ms). Bleibt bei einem
+	// fehlgeschlagenen Ping auf dem zuletzt erfolgreichen Wert stehen -
+	// targetHasLatency() unterscheidet "noch nie erfolgreich" von "0ms".
+	float targetLatencyMs(size_t i) const { return (i < numTargets) ? targets[i].lastLatencyMs : 0.0f; }
+	bool targetHasLatency(size_t i) const { return (i < numTargets) ? targets[i].hasLatency : false; }
 
 private:
 	void pingGoogle();
@@ -37,6 +42,8 @@ private:
 		String ip;
 		bool ok = false;
 		bool checked = false;
+		float lastLatencyMs = 0.0f;
+		bool hasLatency = false;
 	};
 
 	uint32_t lastCheckMs = 0;

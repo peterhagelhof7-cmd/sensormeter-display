@@ -29,7 +29,8 @@ Task gleichzeitig angefasst wird.
 
 ------------------------------------------------------------
 
-2. SOFTWAREMODULE (Stand: vollständig umgesetzt, P0-P8 + Webserver/OTA)
+2. SOFTWAREMODULE (Stand: vollständig umgesetzt, P0-P8 + Webserver/OTA +
+   Warnschwellwerte/Dashboard/Kalibrierung)
 
 2.1 DisplayManager
 TFT_eSPI-Init (Querbetrieb 320x240), Boot-Screen-Hilfsfunktion.
@@ -140,9 +141,23 @@ Screen-Loop (Touch-Poll unabhängig vom festen 200ms-Zug-Takt).
 Dünner Wrapper um die Update-Bibliothek (lokales OTA per .bin-Upload).
 
 2.25 WebServerManager
-Async-Webserver (ESPAsyncWebServer/AsyncTCP, Port 80, HTTP-Basic-Auth):
-Einstellungsformular (Name, Passwort, Betriebsmodus, Helligkeit,
-Sensormeter-Ziel, Ping-Ziele) + OTA-Upload-Endpunkt. Kein REST-API/JSON.
+Async-Webserver (ESPAsyncWebServer/AsyncTCP, Port 80), zwei Seiten:
+"/" (öffentlich, kein Login, Auto-Refresh 30s) zeigt alle aktuellen Werte
+inkl. DHT11-Verlaufsgraph als inline SVG und Alarmbanner; "/settings"
+(HTTP-Basic-Auth) enthält das Einstellungsformular (Name, Passwort,
+Betriebsmodus, Helligkeit, Sensormeter-Ziele inkl. Warnschwellwerte,
+DHT11-Kalibrierkorrektur, Ping-Ziele inkl. Warnschwellwerte, Netzwerk)
++ OTA-Upload-Endpunkt. Nutzt zusätzlich `AlertEvaluator::computeAlertInfo()`
+(siehe 2.26) für den Alarmbanner. Kein REST-API/JSON.
+
+2.26 AlertEvaluator
+Reine Auswertungsfunktion (kein Objekt/State), aus main.cpp ausgelagert:
+prüft DHT11-, Sensormeter- und Ping-Werte gegen die in SettingsManager
+konfigurierten Warnschwellwerte und liefert eine `AlertInfo` (aktiv?,
+Richtung rot/blau, betroffene Quelle, Anzahl weiterer gleichzeitig
+betroffener Quellen). Wird identisch von main.cpp (Touch-UI/LED/Blink-
+Hintergrund) UND WebServerManager (Dashboard-Alarmbanner) aufgerufen,
+damit beide Anzeigen nie auseinanderlaufen können.
 
 ------------------------------------------------------------
 
@@ -226,22 +241,42 @@ Strombedarf und Netzteilempfehlung: docs/stromversorgung.md.
 8. WEBSERVER + OTA (Zusatzfunktion, siehe lastenheft.txt Abschnitt 11)
 
 Async (ESPAsyncWebServer/AsyncTCP), damit HTTP-Anfragen den Hauptloop
-nicht blockieren. HTTP-Basic-Auth (fester Benutzername "admin", Passwort
-in NVS). Kein HTTPS-Client, kein Remote-Versionscheck - Firmware-Update
-ausschließlich per lokalem .bin-Upload, dafür ein Link zu den
-GitHub-Releases zum manuellen Herunterladen (identisches Vorgehen wie im
-Sensormeter-Projekt, dortige Begründung: HTTPS-Client kostet ~168 KB Flash
-allein).
+nicht blockieren. Zwei Seiten: "/" (öffentliches Status-Dashboard, kein
+Login) und "/settings" (HTTP-Basic-Auth, fester Benutzername "admin",
+Passwort in NVS). Kein HTTPS-Client, kein Remote-Versionscheck -
+Firmware-Update ausschließlich per lokalem .bin-Upload, dafür ein Link zu
+den GitHub-Releases zum manuellen Herunterladen (identisches Vorgehen wie
+im Sensormeter-Projekt, dortige Begründung: HTTPS-Client kostet ~168 KB
+Flash allein) - Hinweis: aktuell existiert noch kein echtes GitHub-Release
+mit `.bin`-Anhang für dieses Repo, die `.bin` muss bis dahin selbst via
+`pio run` gebaut werden (siehe docs/admin-guide.pdf Abschnitt 8.1).
 
 ------------------------------------------------------------
 
 9. NEBENLÄUFIGKEIT
 
 ESPAsyncWebServer verarbeitet Anfragen in einem eigenen FreeRTOS-Task,
-nicht im Arduino-Hauptloop. `SettingsManager` ist das einzige Objekt, das
-von beiden Seiten (Hauptloop/Touch-UI UND Web-Handler) gleichzeitig
-gelesen/geschrieben wird - abgesichert über einen FreeRTOS-Mutex
-(`SemaphoreHandle_t`) um jeden Getter/Setter, nach demselben Muster wie
-`DataManager` im Sensormeter-Projekt. `BacklightManager` (einfacher
-LEDC-Registerzugriff) und `OtaManager` (nur während eines einzelnen
-Uploads genutzt) sind bewusst nicht zusätzlich abgesichert.
+nicht im Arduino-Hauptloop. `SettingsManager` wird von beiden Seiten
+(Hauptloop/Touch-UI UND Web-Handler) gleichzeitig gelesen/geschrieben -
+abgesichert über einen FreeRTOS-Mutex (`SemaphoreHandle_t`) um jeden
+Getter/Setter, nach demselben Muster wie `DataManager` im
+Sensormeter-Projekt. `BacklightManager` (einfacher LEDC-Registerzugriff)
+und `OtaManager` (nur während eines einzelnen Uploads genutzt) sind
+bewusst nicht zusätzlich abgesichert.
+
+**Offener Punkt (noch NICHT abgesichert):** Seit dem Status-Dashboard
+liest `WebServerManager` zusätzlich auch `SensorManager`, `PingManager`,
+`SensormeterManager` und `GraphManager` (alle nur lesend, für die
+Dashboard-Anzeige) - diese vier Objekte werden weiterhin ausschließlich
+vom Hauptloop geschrieben (DHT11-/Ping-/Sensormeter-Polling,
+Verlaufs-Ringpuffer), aber OHNE Mutex, anders als `SettingsManager`.
+Insbesondere `String`-Rückgaben (z.B. `PingManager::targetIp()`,
+`SensormeterManager::systemName()`/`sensorName()`) sind ein theoretisches
+Risiko, da die Arduino-`String`-Klasse nicht thread-sicher ist - ein
+gleichzeitiger Schreibzugriff während des Web-Tasks mittendrin liest,
+könnte im ungünstigsten Fall zu einem inkonsistenten Zwischenzustand
+führen. Bisher ohne beobachtete Auswirkung (Werte sind einfache, selten
+gleichzeitig geänderte Skalare/kurze Strings, Zeitfenster entsprechend
+klein), aber nicht durch denselben Mutex-Mechanismus wie
+`SettingsManager` abgesichert. Nachziehen (gleiches Muster: Mutex je
+Objekt) wäre der korrekte Fix, bisher aus Aufwandsgründen zurückgestellt.

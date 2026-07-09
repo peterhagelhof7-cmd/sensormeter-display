@@ -506,6 +506,16 @@ wird statt bis zum naechsten regulaeren Timer zu warten (bis zu 5s
 Uhrzeit-Redraw-Intervall waeren sonst als eingefrorener Bildschirm
 wahrgenommen worden).
 
+**Korrektur (siehe "Fünf Touch-UI-Fixes" weiter unten):** Dieser Mechanismus
+erzwang nur den naechsten `StatusBar::draw()`-**Aufruf**, nicht dass darin
+auch tatsaechlich neu gezeichnet wird - `draw()` hat seinen eigenen
+Diff-Cache (siehe Abschnitt "Bildschirm 'zitterte'" oben), der bei
+unveraenderten Werten trotzdem nichts zeichnet. Blieb lange unbemerkt, weil
+Zeit/WLAN-Balken/Temperatur sich meistens innerhalb der paar Sekunden bis
+zum naechsten echten Wertwechsel sowieso aendern - auf echter Hardware nach
+mehrfachem Oeffnen/Schliessen aber reproduzierbar als "obere Leiste bleibt
+manchmal leer" aufgefallen. Fix: `StatusBar::forceRedraw()`.
+
 ### Snake (P6) als Platzhalter in der Modus-Liste
 Der Menuepunkt "Snake" ist bereits Teil des Einstellungen-Dialogs (wie im
 Lastenheft verlangt: Slide/Static/Snake/Systemeinstellungen sind EIN
@@ -686,3 +696,539 @@ einen Link auf "Releases auf GitHub" zeigt.
 Versionsnummer zusätzlich in README, One-Pager und Admin-Guide vermerkt,
 wie bei den beiden anderen Projekten. Git-Tags/GitHub-Releases mit
 `.bin`-Artefakt sind - wie dort auch - noch nicht Teil dieser Änderung.
+
+### Nachtrag: v0.9.0-rc2 + Doku-Aufräumen nach den Warnschwellwert-/Dashboard-Nachträgen
+Nach den zahlreichen Nachträgen oben (Warnschwellwerte, öffentliches
+Dashboard, Kalibrierkorrektur, PRO-Sensor-Schwellwerte, diverser
+Feinschliff) enthielten mehrere Dokumente noch den vorherigen Stand:
+
+- `lastenheft.txt` Abschnitt 11 behauptete "kein Status-Dashboard" - seit
+  dem öffentlichen Dashboard falsch, korrigiert (Dashboard-Inhalt
+  ergänzt, Abschnitt 9 um Blink-Verhalten/Mehrfach-Alarm erweitert)
+- `pflichtenheft.txt` 2.25 (WebServerManager) und Abschnitt 8 nannten nur
+  das alte Einstellungsformular, nicht die Seitenaufteilung "/" +
+  "/settings" - ergänzt, dazu ein neuer Eintrag 2.26 (`AlertEvaluator`)
+- README.md behauptete noch "Noch nicht verifiziert: reale Hardware" -
+  seit den zahlreichen echten Flash-/Testzyklen in dieser Session falsch,
+  korrigiert
+- `docs/admin-guide.pdf` und `docs/sensormeter-display-onepager.pdf`:
+  HTML-Quellen aus der Git-Historie wiederhergestellt (waren nach dem
+  PDF-Export gelöscht worden, siehe Commit "HTML-Quelldokumente entfernt,
+  wo bereits eine PDF existiert"), aktualisiert (neue Version, neuer
+  Dashboard-Abschnitt im Admin-Guide, `AlertEvaluator`, Warnschwellwerte,
+  Kalibrierung), per Headless-Chrome (`--headless --print-to-pdf`) neu
+  als PDF exportiert, HTML-Quellen danach wieder entfernt (Konvention
+  beibehalten)
+- Admin-Guide Abschnitt 8.1 (jetzt 9.1): der seit 2026-07-08
+  zurückgestellte OTA-Wortlaut ("von den GitHub-Releases") korrigiert -
+  es existiert weiterhin kein GitHub-Release mit `.bin`-Anhang für dieses
+  Repo, Wortlaut sagt jetzt klar, dass die `.bin` selbst gebaut werden muss
+
+**Bei dieser Durchsicht gefunden, aber NICHT behoben (siehe
+pflichtenheft.txt Abschnitt 9 für die vollständige Beschreibung):**
+`WebServerManager` liest seit dem Dashboard auch `SensorManager`,
+`PingManager`, `SensormeterManager` und `GraphManager` - alle vier ohne
+Mutex, anders als `SettingsManager`. Theoretisches Risiko bei
+Arduino-`String`-Rückgaben (nicht thread-sicher) unter echter Nebenläufigkeit
+zwischen Hauptloop und Web-Task. Bisher ohne beobachtete Auswirkung,
+bewusst zurückgestellt statt im Rahmen dieses Aufräum-Durchgangs
+mitgezogen (separater, planbarer Umbau: Mutex je Objekt nach demselben
+Muster wie `SettingsManager`).
+
+## Fünf Touch-UI-Fixes (Nutzer-Feedback nach erstem Hardware-Test)
+
+### Redraw-Cache blieb nach InfoUI/SettingsUI stehen
+`GraphManager::drawFullScreen()` und `PingView::drawAverage()`/
+`drawTargetList()` haben (wie `StatusBar`) einen Diff-Cache, der nur bei
+geänderten Anzeigewerten neu zeichnet, um Flackern zu vermeiden (siehe
+oben "Redraw-Cache" bei StatusBar). InfoUI/SettingsUI überschreiben aber
+per `fillScreen()` den kompletten Bildschirm - kehrt man danach zu einer
+Ansicht zurück, deren letzter gecachter Wert sich zufällig nicht geändert
+hat, zeichnet der Cache gar nichts, der Screen bleibt leer bis zur
+nächsten echten Wertänderung. `main.cpp` setzte für `StatusBar` bereits
+`lastStatusBarMs = 0` als Workaround, aber `GraphManager`/`PingView`
+hatten kein Äquivalent. Fix: beide bekommen ein `forceRedraw()`
+(`everDrawn`-Flag zurücksetzen), aufgerufen direkt nach
+`InfoUI::run()`/`settingsUI.run()` in `main.cpp`. `ClockView` und
+`SensormeterView` zeichnen ohnehin unbedingt bei jedem Aufruf, brauchen
+also keinen Fix.
+
+### Ping-Ziele: Latenz pro Ziel
+`PingManager::TargetState` speicherte bisher nur `ok`/`checked`, keine
+Zeit. Ergänzt um `lastLatencyMs` (aus `Ping.averageTime()` bei Erfolg) und
+`hasLatency` (unterscheidet "noch nie erfolgreich gepingt" von "0ms
+gemessen"). Bei Fehlschlag bleibt der zuletzt erfolgreiche Wert stehen
+statt auf 0 zurückzufallen - wirkt weniger sprunghaft als bei jedem
+Timeout "0ms" anzuzeigen. `PingView`s Redraw-Signature musste um die
+Latenz erweitert werden, sonst hätte sich eine reine Latenzänderung (ohne
+OK/Fehler-Wechsel) gar nicht im Diff-Cache niedergeschlagen.
+
+### Ansichtswechsel per Tippen links/rechts: nur im Slide-Modus
+Im Static-Modus zeigt das Gerät genau eine vom Nutzer fest gewählte
+Datenquelle (`settings.staticSource()`) - es gibt dort kein sinnvolles
+"nächste/vorige Ansicht". Die neue Tap-Navigation (linke Bildschirmhälfte
+= vorige, rechte = nächste) wirkt daher nur im Slide-Modus und verändert
+dort denselben `slideIndex`, den auch der automatische Timer nutzt;
+zusätzlich wird `slideLastSwitchMs` beim manuellen Wechsel zurückgesetzt,
+damit der Auto-Wechsel nicht unmittelbar danach nochmal weiterspringt.
+Falls das nicht der Erwartung entspricht (z. B. auch im Static-Modus
+gewünscht), bitte melden.
+
+### WLAN-Signalstärke: Hysterese gegen Flackern
+`WlanManager::signalBars()` mappte den RSSI-Wert bisher ungefiltert auf
+feste Schwellen (-60dBm/-75dBm) - lag der Messwert nahe an einer Schwelle,
+sorgte normales Funkrauschen für ständiges Umspringen zwischen z. B. 2 und
+3 Balken bei jeder 300ms-StatusBar-Aktualisierung. Fix: exponentiell
+geglätteter RSSI (`smoothedRssi = smoothedRssi*0.8 + rssi*0.2`) plus
+Hysterese von 4dB beim Schwellenwechsel (rauf UND runter je 4dB Abstand
+vom Grenzwert nötig, bevor die Balkenanzahl wechselt) - direkt am
+ursprünglichen Grenzwert bleibt die zuletzt gezeigte Stufe stabil.
+
+### Temperaturverlauf: Zeitachse beschriftet
+`GraphManager::drawGraph()` zeigte X-Achse (Zeit) bisher ganz ohne
+Beschriftung, nur die Y-Achsen (Temperatur links, Feuchte rechts) hatten
+Min/Max-Werte. Ergänzt um Uhrzeit-Labels am linken/rechten Rand des Graphen
+(ältester/neuester Messpunkt aus dem Ringpuffer), nur sichtbar wenn
+`TimeSync::isValid()` (ohne NTP-Sync sind die gespeicherten Zeitstempel
+nicht aussagekräftig).
+
+Alle fünf Fixes mit `pio run` gebaut, erfolgreich kompiliert und per
+`pio run --target upload` auf das echte Board geflasht (Boot/WLAN-Verbindung
+im Serial-Log bestätigt).
+
+## Warnschwellwerte (DHT11 intern, Sensormeter-Ziele, Ping)
+
+Nutzerwunsch: konfigurierbare Warnschwellwerte für den internen DHT11-
+Sensor, jedes Sensormeter-Ziel und Ping-Latenz. Vier offene Design-Fragen
+per Rückfrage geklärt, bevor implementiert wurde:
+
+- **Auslöseverhalten:** ganzer Bildschirm rot bei Über-/Unterschreitung -
+  bewusst derselbe Mechanismus wie der bestehende Ping-Ausfall-Alarm
+  (`alertActive` → `bgColor=TFT_RED`, siehe P7/P8-Abschnitt oben), keine
+  neue visuelle Sprache nötig. Als Nebeneffekt löst ein überschrittener
+  Schwellwert jetzt auch die rot blinkende Status-LED aus (`led.update()`
+  hängt bereits an `alertActive`) - konsistent mit lastenheft.txt
+  Abschnitt 9, das LED und Rot-Bildschirm als gemeinsamen "Alarmzustand"
+  behandelt.
+- **Richtung:** sowohl Maximal- als auch Minimalwerte (zu heiß/kalt, zu
+  feucht/trocken) für Temperatur/Feuchte. Bei Ping-Latenz nur ein
+  Maximalwert - eine "Mindestlatenz" ist kein sinnvolles Konzept.
+- **Ping-Granularität:** pro Ziel einzeln, google.com bekommt einen eigenen,
+  davon unabhängigen Schwellwert (`googlePingMaxLatencyMs()` getrennt von
+  den indizierten `pingMaxLatencyMs(i)`).
+- **Konfigurationsort:** ausschließlich Webserver, keine Touch-UI-Screens
+  nötig - reduziert den Umsetzungsaufwand erheblich (kein neues
+  Zifferntastenfeld-Formular am Gerät).
+
+### Sentinel-Werte statt zusätzlicher bool-Flags
+Um "kein Schwellwert gesetzt" ohne einen zusätzlichen bool pro Wert
+abzubilden: Temperatur/Feuchte nutzen `INT16_MIN`
+(`SettingsManager::kThresholdDisabled`) als Sentinel, da 0°C/0% reale
+Messwerte sein können und daher nicht als "aus" missverstanden werden
+dürfen. Ping-Latenz nutzt dagegen `0` als Sentinel - `Ping.averageTime()`
+liefert nie exakt 0ms, ein echter Schwellwert von 0 wäre ohnehin bei jedem
+Ping ausgelöst worden und damit sinnlos. Webformular-Felder: leer =
+gespeichert als Sentinel, ausgefüllt = echter Wert.
+
+### Schwellwerte pro Ziel-Slot, nicht pro Einzelsensor
+Ein Sensormeter-PRO-Ziel liefert zwei Sensor-Slides (Sensor 1+2, siehe
+`SensormeterView`), bekommt aber nur EINEN gemeinsamen Schwellwertsatz -
+kein separater Schwellwert je Einzelsensor. Vereinfacht die
+Weboberfläche (ein Formular pro Ziel statt zwei) und deckt den
+naheliegenden Anwendungsfall (beide Sensoren am selben Ziel/Standort)
+ausreichend ab.
+
+### Bug im Entwurf gefunden und behoben: Slot-Wiederverwendung hätte alte Schwellwerte "vererbt"
+Ping-/Sensormeter-Ziele werden intern als Arrays mit fortlaufendem Index
+verwaltet; beim Entfernen eines Ziels rutschen alle nachfolgenden Einträge
+eine Position nach vorne (`removePingTarget()`/`removeSensormeterTarget()`).
+Ohne Gegenmaßnahme wäre der dadurch frei werdende letzte Array-Slot mit
+seinem alten Schwellwert stehen geblieben - ein später dort neu
+hinzugefügtes Ziel (`addPingTarget()`/`addSensormeterTarget()` schreiben
+immer an Index `count_++`) hätte fälschlich die Schwellwerte des vorher
+entfernten Ziels übernommen. Behoben: beide Remove-Methoden setzen den
+frei werdenden Slot zusätzlich explizit auf den Sentinel-Wert zurück (und
+persistieren das), bevor er wiederverwendet werden kann.
+
+### Webformular-Layout: separate Mini-Formulare pro Ziel statt im Hauptformular
+Die Sensormeter-/Ping-Zielliste ist dynamisch (0-5 Einträge). Statt die
+Schwellwertfelder in das eine große `/save`-Hauptformular zu packen
+(hätte bei jeder Ziel-Änderung eine variable Feldanzahl im selben Formular
+bedeutet), bekommt jedes Ziel sein eigenes kleines Formular
+(`/sensormeter/thresholds`, `/ping/threshold`) mit eigenem
+Speichern-Button - konsistent mit dem bereits bestehenden Muster, dass
+Ziel-Hinzufügen/Entfernen ebenfalls eigene Formulare/Endpunkte sind. DHT11
+(intern) und der google.com-Schwellwert sind dagegen fest (nicht
+listenbasiert) und bleiben daher im Hauptformular.
+
+## Nachtrag: Blink-Alarm mit Richtung/Quelle statt statischem Rot-Bildschirm
+
+Nutzer-Feedback nach dem ersten Test der Warnschwellwerte: die
+Sensormeter-Zielliste im Webformular zeigte pro Ziel nur unbeschriftete
+Eingabefelder (nur Platzhaltertext, der beim Ausfüllen verschwindet) -
+bei mehreren Zielen nicht mehr erkennbar, welches Feld zu welchem Ziel
+gehört. Außerdem drei Verhaltensänderungen gewünscht: Bildschirm blinkt
+(nicht dauerhaft) rot bei Überschreitung, blau bei Unterschreitung; die
+betroffene Quelle (Intern/Sensormeter/Ping) wird in der Statusleiste
+angezeigt; im DHT11-Graph werden die Schwellwerte als Linien eingezeichnet.
+
+### Webformular: CSS-Tabelle statt <table>, da eine Zeile ein <form> ist
+Jede Sensormeter-Zielzeile ist funktional ein eigenes `<form>` (POST an
+`/sensormeter/thresholds`) - ein `<form>` als direktes Kind eines
+`<table>`/`<tr>` ist ungültiges HTML. Gelöst über CSS-"Tabellen" (`display:
+table`/`table-row`/`table-cell` auf normalen `<div>`/`<form>`-Elementen)
+statt echter `<table>`-Tags - das `<form>` selbst wird zur Tabellenzeile
+und darf trotzdem als Formular fungieren. Spaltenköpfe (Ziel, Temp
+min/max, Feuchte min/max) sorgen jetzt für eindeutige Zuordnung auch bei
+mehreren Zielen.
+
+### Speichern und Entfernen im selben Formular (per `formaction`)
+Um pro Tabellenzeile bei nur einem `<form>` trotzdem zwei verschiedene
+Aktionen (Schwellwerte speichern vs. Ziel entfernen) anzubieten, nutzt der
+"Entfernen"-Button `formaction="/sensormeter/remove"` (überschreibt die
+Standard-`action` des Formulars nur für diesen Button). Der Remove-Handler
+liest ohnehin nur das Feld `i` und ignoriert die mitgesendeten
+Schwellwert-Felder - keine Änderung an `handleSensormeterRemove()` nötig.
+
+### Blinken statt Dauerzustand: 1s-Taktwechsel, Farbe zeigt Richtung
+Der bisherige Ping-Ausfall-Alarm hielt den Bildschirm dauerhaft rot,
+solange die Störung anhielt. Jetzt blinkt der Hintergrund (1s Taktwechsel,
+`(millis()/1000)%2`) - Farbe zeigt die Richtung: Rot für Überschreitung
+eines Max-Werts ODER einen Ping-Ausfall (beides "zu viel"/Störung), Blau
+für Unterschreitung eines Min-Werts (Ping hat keine sinnvolle
+"Unterschreitung", daher immer Rot). Der Redraw-Mechanismus musste
+entsprechend angepasst werden: statt eines einzelnen `alertActive`-Bool-
+Wechsels erzwingt jetzt jede `bgColor`-Änderung ein Neuzeichnen
+(`bgColorChanged`), da sich die Farbe durch das Blinken bereits ohne
+An-/Abklingen des Alarms laufend ändert. Die Status-LED (`LedManager`)
+bekam dieselbe Rot/Blau-Unterscheidung, blinkt aber weiterhin mit ihrem
+eigenen, unveränderten 500ms-Takt.
+
+### Alarmquelle: nur EINE Quelle gleichzeitig anzeigbar, feste Prioritätsreihenfolge
+Mehrere Schwellwertverletzungen können theoretisch gleichzeitig aktiv
+sein (z.B. DHT11 zu warm UND ein Sensormeter-Ziel zu kalt). Die
+Statusleiste hat nur Platz für ein kurzes Label, daher gewinnt bei
+`computeAlertInfo()` der erste Treffer in fester Reihenfolge Intern →
+Sensormeter → Ping - keine inhaltliche Rangfolge, nur zur
+deterministischen, platzsparenden Anzeige. Das Label wird in der
+Statusleiste zwischen Info-Symbol und DHT11-Werten platziert (Platz dort
+bisher ungenutzt) und bleibt - anders als der Bildschirmhintergrund -
+durchgehend sichtbar (nicht blinkend), damit die Ursache auch während der
+"weißen" Blink-Phase ablesbar bleibt.
+
+### Graph-Linien: gestrichelt statt durchgezogen, auf Plotbereich geklemmt
+Schwellwertlinien im DHT11-Graph nutzen dieselben Farben wie die
+Messwert-Polylinien (Temperatur rot, Feuchte blau), aber gestrichelt
+(eigene `drawDashedHLine()`-Hilfsfunktion, TFT_eSPI kennt keine
+gestrichelten Linien nativ) - unterscheidet sie klar von den
+durchgezogenen Messdaten. Liegt ein Schwellwert außerhalb des aktuell
+sichtbaren (autoskalierten) Wertebereichs, wird die Linie auf den
+Plotbereichsrand geklemmt statt sie (unsichtbar) außerhalb zu zeichnen -
+zeigt an "Schwellwert noch nicht erreicht" statt sie ersatzlos wegfallen
+zu lassen. Nur für DHT11 (intern) umgesetzt, da nur diese Ansicht einen
+Verlaufsgraphen hat - Sensormeter-Ziele zeigen nur den aktuellen Wert.
+
+Erneut mit `pio run` gebaut (erfolgreich) und per `pio run --target
+upload` geflasht.
+
+## Nachtrag 3: Öffentliches Status-Dashboard + Design aus dem Admin-Guide
+
+Nutzerwunsch: eine der Einstellungsseite vorgelagerte, NICHT
+passwortgeschützte Webseite mit allen aktuellen Werten, Auto-Refresh alle
+30s - plus die Übernahme der Farbpalette/Typografie aus
+`docs/admin-guide.pdf` (Navy-Cover, Orange-Akzent) auf beide Webseiten.
+
+### Sicherheitsabwägung explizit angesprochen, vom Nutzer akzeptiert
+Ein unauthentifizierter Endpunkt zeigt Sensormesswerte sowie Ping-/
+Sensormeter-Ziel-IPs jedem im selben Netzwerk, ohne Login. Das wurde vor
+der Umsetzung ausdrücklich als Kompromiss benannt (siehe Rückfrage) - für
+ein privates LAN akzeptiert. Die Einstellungsseite selbst bleibt
+vollständig passwortgeschützt; das Dashboard ist rein lesend (keine
+Formulare, keine Schreibaktionen).
+
+### Routen getrennt: `/` (öffentlich) und `/settings` (Login)
+`/` liefert jetzt `buildDashboardPage()` ohne `checkAuth()`-Aufruf, die
+bisherige Einstellungsseite (`buildSettingsPage()`, vormals `buildPage()`)
+liegt auf `/settings` und bleibt per HTTP-Basic-Auth geschützt. Alle
+Formular-Handler (`handleSave`, `handlePingAdd/Remove`,
+`handleSensormeterAdd/Remove/Thresholds`, `handlePingThreshold`)
+redirecten jetzt auf `/settings` statt `/`, damit man nach dem Speichern
+wieder auf der Einstellungsseite landet statt auf dem öffentlichen
+Dashboard.
+
+### Alarm-Logik ausgelagert (AlertEvaluator.h/.cpp) statt dupliziert
+Das Dashboard muss dieselbe Warnschwellwert-Auswertung zeigen wie die
+Touch-UI (`main.cpp`) - ein zweites Mal von Hand nachbauen hätte das
+Risiko geschaffen, dass beide Stellen bei einer künftigen Änderung
+auseinanderlaufen (genau das Muster, das im Sensormeter-WLAN-Gehäuse-
+Projekt bereits einmal zu einem Bug durch doppelt gepflegte Formeln
+geführt hat). Die `AlertInfo`-Struct und `computeAlertInfo()` wurden
+daher aus `main.cpp` in ein eigenes Modul verschoben, das explizite
+Referenzen (`SensorManager`, `SensormeterManager`, `PingManager`,
+`SettingsManager`) statt globaler Variablen entgegennimmt - dadurch aus
+`main.cpp`'s `loop()` UND aus `WebServerManager::buildDashboardPage()`
+gleichermaßen aufrufbar.
+
+### Design aus dem Admin-Guide übernommen: Navy-Banner, Orange-Akzent, warmes Creme
+Palette 1:1 aus `docs/admin-guide.pdf` übernommen: Navy `#0f1f3d` für die
+Kopfzeile (analog zum Cover des PDFs), Orange `#c8622a` für Buttons/
+Akzentlinien, warmes Creme `#f2f0e9` für Tabellenköpfe/Kartenrahmen
+`#e4e1d8` - dieselbe Systemschriftart-Stack
+(`-apple-system,'Segoe UI',Roboto,...`). Als gemeinsame `sharedCss()`-
+Methode statt doppelt gepflegtem CSS in beiden Seiten-Buildern. Rot-Braun
+`#a63d2e` (Warn-Callout-Farbe aus dem Guide) für Ausfall/Überschreitung,
+dazu passend ein neues Blau `#2a5ba0` für Unterschreitung (im Guide selbst
+nicht vorhanden, farblich zur Navy passend ergänzt) - konsistent mit der
+Rot/Blau-Unterscheidung aus dem Blink-Alarm der Touch-UI.
+
+### Bestehende Einstellungsseite: nur CSS/Wrapper geändert, Formulare unverändert
+Um das Risiko einer Restrukturierung zu vermeiden, wurde die
+Formular-Struktur der Einstellungsseite (alle `<fieldset><legend>`-Blöcke)
+unverändert gelassen - nur `fieldset`/`legend` bekamen per CSS das
+Karten-Aussehen (weißer Hintergrund, Rahmen, Radius) verpasst, plus ein
+neuer Banner-Header oben. Dadurch bleibt das Risiko einer Regression in
+der Formularlogik (Sensormeter-/Ping-Ziele, Schwellwerte, Netzwerk, OTA)
+minimal.
+
+Mit `pio run` gebaut (erfolgreich, Flash 75,8 % / 993.069 B, RAM 14,7 % /
+48.056 B) und per `pio run --target upload` geflasht.
+
+## Nachtrag 4: Vier Feinschliff-Punkte am Dashboard/Einstellungen
+
+Nutzer-Feedback nach dem ersten Blick aufs neue Design: Verlaufsgraph auch
+im Dashboard für den internen Sensor, Sensormeter-Ziel 1 muss ohne
+Entfernen neu setzbar sein, einheitliche Rahmenbreite (Banner war breiter
+als die Karten), und die aktuelle NTP-Zeit mit Sync-Zeitpunkt auf der
+Statusseite.
+
+### DHT11-Verlaufsgraph im Dashboard: inline SVG statt Canvas/JS
+Der Touch-Display-Graph (`GraphManager::drawGraph()`) hat kein Web-
+Äquivalent gehabt - das Dashboard zeigte bisher nur den aktuellen Wert.
+Ergänzt um `WebServerManager::dhtGraphSvg()`: liest den Ringpuffer über
+neue, rein lesende `GraphManager`-Zugriffsmethoden (`entryCount()`/
+`entryTs()`/`entryTempC()`/`entryHumidityPct()`) aus und rendert ihn als
+inline `<svg>` (Polylinien, kein Canvas/JavaScript nötig - passt zum
+bisherigen reinen-HTML-Stil des Webservers). Warnschwellwerte als
+gestrichelte Linien in derselben Farblogik wie auf dem Display (rot
+Temperatur, blau Feuchte), auf den sichtbaren Wertebereich geklemmt.
+`WebServerManager` bekam dafür eine weitere lesende Referenz
+(`const GraphManager &graph_`).
+
+### Sensormeter-Ziel-IP direkt änderbar statt nur entfernen+neu anlegen
+`removeSensormeterTarget()` verweigert das Entfernen des letzten
+verbleibenden Ziels (siehe weiter oben) - ohne weitere Änderung wäre ein
+einzelnes, falsch eingetragenes Ziel dadurch permanent falsch geblieben.
+Neue Methode `SettingsManager::setSensormeterTargetIp()` ändert die IP
+in-place (Schwellwerte bleiben erhalten). In der Web-Tabelle ist das
+Ziel-Feld der ersten Sensor-Zeile jetzt ein Eingabefeld statt reinem Text;
+der bestehende "Speichern"-Button aktualisiert IP und Schwellwerte in
+einem Schritt. Bei PRO-Zielen bleibt die IP nur in der Sensor-1-Zeile
+editierbar (gehört dem ganzen Ziel, nicht dem einzelnen Sensor - gleiches
+Prinzip wie beim "Entfernen"-Button, der ebenfalls nur dort erscheint).
+
+### Rahmenbreite vereinheitlicht: Banner-Bleed entfernt
+Der Banner-Header hatte einen negativen Rand (`margin:0 -14px`), der ihn
+bis an den Viewport-Rand "bluten" ließ - dadurch war er sichtbar breiter
+als die Fieldsets/Karten darunter, die innerhalb der `.wrap`-Polsterung
+blieben. Bleed entfernt, Banner bekam stattdessen denselben Randradius wie
+Karten/Fieldsets (`border-radius:6px`) - jetzt sind alle Boxen exakt gleich
+breit.
+
+### NTP-Sync-Zeitpunkt: echter SNTP-Callback statt nur aktuelle Uhrzeit
+"Letzter Sync" ist etwas anderes als "aktuelle Uhrzeit" - letztere läuft
+zwischen zwei Sync-Ereignissen über die interne RTC/`millis()` weiter und
+sagt nichts darüber aus, wann tatsächlich zuletzt erfolgreich synchronisiert
+wurde. `TimeSync::begin()` registriert daher `sntp_set_time_sync_notification_cb()`
+(ESP-IDF-SNTP-API, `esp_sntp.h`) - der Callback speichert den Zeitpunkt
+jedes erfolgreichen Sync-Ereignisses in einer modul-internen Variable.
+Neue Methode `TimeSync::formatLastSync()` formatiert das als
+"TT.MM.JJ HH:MM" (2-stelliges Jahr, wie vom Nutzer gewünscht), leerer
+String vor dem ersten erfolgreichen Sync. Im Dashboard-Banner unter dem
+"Aktualisiert automatisch"-Hinweis angezeigt.
+
+Mit `pio run` gebaut (erfolgreich, Flash 76,2 % / 998.385 B, RAM 14,7 % /
+48.064 B) und per `pio run --target upload` geflasht.
+
+## Nachtrag 5: Ping-Ziel-Gruppierung + Achsenbeschriftung mit 1°-Inkrementen
+
+Nutzer-Feedback: Ping-Ziel-IP und deren Schwellwert-Formular in den
+Einstellungen wirkten bei mehreren Zielen wie zwei unabhängige Zeilen statt
+als zusammengehörige Gruppe; der DHT11-Graph im Dashboard hatte trotz
+Nachtrag 4 immer noch keine echte Achsenbeschriftung. Rückfrage zum Umfang
+(Touch-Display vs. Webseiten) ergab: **nur Webseiten**.
+
+### Ping-Ziele: `.pingrow-group`-Wrapper mit Trennlinie
+IP-Zeile + Schwellwert-Formular jedes Ziels stecken jetzt in einem
+gemeinsamen `<div class="pingrow-group">` mit `border-bottom`, der optisch
+zum nächsten Ziel abgrenzt - keine Formular-Restrukturierung nötig, nur
+ein zusätzlicher Wrapper plus eine CSS-Regel.
+
+### Achsenbeschriftung: 1°/1%-Schritte statt fester Rundwert-Raster
+`dhtGraphSvg()` bekam echte Tick-Beschriftungen an beiden Hochachsen
+(links Temperatur in °C/rot, rechts Feuchte in %/blau) - eine Zeile pro
+ganzzahligem Grad/Prozent zwischen dem jeweiligen Min- und Maxwert des
+aktuellen 12h-Fensters. Bewusst **kein** festes Rundwert-Raster (z.B.
+0/5/10/...), sondern das Fenster selbst (`tempMin`...`tempMax` bzw.
+`humMin`...`humMax`) als Skala - dadurch landen die tatsächlich erfassten
+Extremwerte immer exakt auf einem beschrifteten Strich, nie zwischen zwei
+Rundwert-Stufen ("Sliding Window", da sich Min/Max mit jedem neuen
+Messwert und jedem aus dem Ringpuffer herausfallenden alten Wert
+verschieben können). `kMarginY` von 10 auf 16px erhöht, um Platz für die
+`°C`/`%`-Achsentitel über der Grafik zu schaffen.
+
+Mit `pio run` gebaut (erfolgreich, Flash 76,3 % / 1.000.389 B, RAM 14,7 % /
+48.064 B) und per `pio run --target upload` geflasht.
+
+## Nachtrag 6: Erfassungszeitpunkt des DHT11-Werts in derselben Zeile
+
+Nutzerwunsch: neben den aktuellen DHT11-Werten im Dashboard soll erkennbar
+sein, WANN dieser Wert erfasst wurde - in derselben Zeile, nicht separat.
+
+### Erfassungszeitpunkt, nicht Anzeigezeitpunkt
+Wichtig: das ist NICHT dieselbe Information wie der bereits vorhandene
+"Letzter NTP-Sync" im Banner (Nachtrag 4) - dort ging es um die
+Systemuhr-Genauigkeit, hier um das Alter des angezeigten Messwerts selbst.
+`SensorManager` bekam dafür `lastReadTs` (`time(nullptr)`, gesetzt nur bei
+einer tatsächlich PLAUSIBLEN Messung in `update()` - bei einer
+implausiblen Messung bleiben sowohl der alte Wert als auch dessen
+Zeitstempel unverändert stehen, konsistent zueinander) und einen neuen
+Getter `lastReadTime()`. Das Dashboard hängt "(Stand HH:MM Uhr)" direkt an
+die Temperatur-/Feuchte-Zeile an, `<span class="hint">` (dezent, kein
+eigener Absatz).
+
+Mit `pio run` gebaut (erfolgreich, Flash 76,4 % / 1.000.841 B, RAM 14,7 % /
+48.072 B) und per `pio run --target upload` geflasht.
+
+## Nachtrag 7: Kalibrierkorrektur für den internen DHT11-Sensor
+
+Nutzerwunsch: der eingebaute DHT11 weicht am eigenen Standort systematisch
+von einem Referenzsensor ab (Beispiel: -1°C) - ein fester, ganzzahliger
+Korrekturwert (°C/%, positiv oder negativ) soll über das Webinterface
+einstellbar sein.
+
+### Korrektur direkt in SensorManager angewendet, nicht an jeder Anzeigestelle
+Die Korrektur wird direkt in `SensorManager::update()` auf den validierten
+Rohmesswert addiert, bevor er in `lastTempC`/`lastHumidityPct` landet -
+dafür bekommt `update()` jetzt eine `const SettingsManager&`-Referenz
+(gleiches Muster wie `SensormeterManager::update(settings)` und
+`PingManager::update(settings)` bereits vorher). Dadurch sehen ALLE
+Verbraucher (Touch-UI-Statusleiste/-Graph, Webserver-Dashboard,
+`computeAlertInfo()`-Warnschwellwert-Auswertung) automatisch den bereits
+korrigierten Wert - eine Alternative (Korrektur nur an der Web-Anzeige)
+hätte das Risiko geschaffen, dass Touch-Display und Web unterschiedliche
+Werte zeigen und Warnschwellwerte auf den falschen (unkorrigierten) Wert
+reagieren.
+
+### Plausibilitätsprüfung bleibt auf dem Rohwert
+`isPlausible()` prüft weiterhin den ROHEN Sensorwert, nicht den
+korrigierten - die Korrektur ist eine kleine Kalibrierkonstante (wenige
+Grad/Prozent), kein Mittel zur Fehlerkompensation, und soll den
+Garbage-Filter (DHT11 liefert bei Lesefehlern u.a. NaN oder Werte weit
+außerhalb des Sensor-Messbereichs) nicht verfälschen. Luftfeuchte wird
+nach der Korrektur auf [0, 100] geklemmt (Temperatur bewusst nicht - kein
+technisch begründetes Limit für einen kalibrierten Innenraumwert).
+
+### Bereits aufgezeichnete Verlaufsdaten bleiben unkorrigiert
+`history.csv`-Einträge, die vor dem Setzen der Korrektur aufgezeichnet
+wurden, werden NICHT rückwirkend angepasst (die Rohwerte sind nicht mehr
+rekonstruierbar, nur die bereits gerundeten/gespeicherten Werte) - ab dem
+Setzen der Korrektur sind alle NEUEN Verlaufspunkte korrigiert, ältere
+bleiben auf dem alten Stand. Für eine Kalibrierkorrektur (typischerweise
+einmalig beim Einrichten gesetzt) ein akzeptabler Kompromiss.
+
+Mit `pio run` gebaut (erfolgreich, Flash 76,5 % / 1.002.237 B, RAM 14,7 % /
+48.072 B) und per `pio run --target upload` geflasht.
+
+## Nachtrag 8: Vier eigene Verbesserungsvorschläge umgesetzt
+
+Nach Rückfrage "fallen dir noch Verbesserungen ein?" vier Vorschläge
+gemacht, der Nutzer wollte 4 der 6 umgesetzt haben (Ping-Timeout-Risiko
+und CSV-Export bewusst nicht - ersteres groesserer Umbau, zweites ohne
+konkreten Bedarf).
+
+### Mehrfach-Alarm-Hinweis: computeAlertInfo() zaehlt jetzt alle Kategorien
+Bisher brach `computeAlertInfo()` bei der ERSTEN gefundenen Verletzung ab
+(Prioritaet Intern -> Sensormeter -> Ping) - eine zweite, gleichzeitig
+aktive Kategorie blieb komplett unsichtbar. Umgebaut auf drei vollstaendige
+Kategorie-Checks (`checkIntern()`/`checkSensormeter()`/`checkPing()`, alle
+in einer neuen anonymen Namespace-Sektion in `AlertEvaluator.cpp`), die
+IMMER alle drei auswerten statt frueh abzubrechen. `AlertInfo` bekam ein
+neues Feld `extraCount` (Anzahl weiterer, gleichzeitig aktiver Kategorien)
+- Statusleiste haengt "+N" an die Quelle an, das Dashboard schreibt einen
+ausführlicheren Satz ("außerdem N weitere Quellen betroffen"). Bewusst nur
+auf Kategorie-Ebene gezaehlt (nicht z.B. pro einzelnem Sensormeter-Sensor),
+da ohnehin nur eine Quelle gleichzeitig anzeigbar ist.
+
+### WLAN-Balken im Dashboard statt Text
+`wifiBarsHtml()` erzeugt drei CSS-Balken (ansteigende Hoehe, gefuellt bis
+zur aktuellen Empfangsstaerke) statt des bisherigen "Signal 2/3"-Texts -
+optisch konsistent zum WLAN-Symbol in der Touch-UI-Statusleiste
+(`StatusBar::drawWifiIcon()`).
+
+### Speichern-Bestätigung per Redirect-Parameter statt JavaScript
+Ohne JS (bewusste Entscheidung von Anfang an, siehe Webserver-Abschnitt
+oben) geht eine Erfolgsmeldung nach einem POST nur über einen Redirect-
+Parameter: alle Formular-Handler redirecten jetzt auf
+`/settings?saved=1` statt nur `/settings`; `buildSettingsPage()` bekam
+einen `bool saved`-Parameter und zeigt bei `true` einen grünen
+"Gespeichert."-Hinweis oben auf der Seite.
+
+### Favicon als inline SVG-Daten-URI
+Browser fragen bei fehlendem Favicon automatisch `/favicon.ico` an - ohne
+eigene Route landete das als 404 im (nicht vorhandenen) Server-Log, aber
+sichtbar als fehlendes Tab-Icon. Kleines Navy-Quadrat mit Orange-Punkt
+(passend zur übrigen Palette) als `data:image/svg+xml`-URI direkt im
+`<head>` beider Seiten - kein zusätzlicher Dateizugriff/Endpunkt nötig.
+
+Mit `pio run` gebaut (erfolgreich, Flash 76,6 % / 1.003.921 B, RAM 14,7 % /
+48.072 B) und per `pio run --target upload` geflasht.
+
+## Nachtrag 2: Schwellwerte pro Sensor statt pro Ziel (PRO-Geräte)
+
+Rückfrage des Nutzers deckte eine Lücke auf: bei einem "Sensormeter PRO"-
+Gerät (2 Sensoren) hätte die ursprüngliche Umsetzung beide Sensoren
+denselben Schwellwertsatz teilen lassen. Auf Nachfrage entschieden:
+getrennte Schwellwerte pro Sensor, mit eigener Zeile in der Web-Tabelle.
+
+### Datenmodell: zweite Dimension statt Verdopplung der Zielanzahl
+`smTempMin_[kMaxSensormeterTargets]` (int16_t) wurde zu
+`smTempMin_[kMaxSensormeterTargets][kMaxSensorsPerTarget]` (analog für
+Max/Hum), mit `kMaxSensorsPerTarget=2` (Sensor 1 immer, Sensor 2 nur bei
+PRO). NVS-Keys um eine zweite Ziffer erweitert (`smTn` + Ziel-Index +
+Sensor-Index, z.B. `smTn01` = Ziel 1, Sensor 2) - beide Indizes sind durch
+die festen Obergrenzen (5 Ziele, 2 Sensoren) garantiert einstellig, daher
+ohne Trennzeichen eindeutig. `removeSensormeterTarget()` muss beim
+Verschieben der Ziel-Slots jetzt beide Sensor-Unterindizes mitverschieben
+und zuruecksetzen (gleiches Prinzip wie zuvor, nur eine Dimension mehr).
+
+### Webserver braucht jetzt Lesezugriff auf SensormeterManager
+Um zu wissen, ob ein Ziel tatsächlich ein PRO-Gerät ist (und damit zwei
+Zeilen statt einer bekommt), muss `WebServerManager` erstmals auf
+`SensormeterManager` zugreifen (bisher nur `SettingsManager` +
+`BacklightManager` + `OtaManager` + `WlanManager`) - als zusätzliche
+`const`-Referenz im Konstruktor, rein lesend (`isResolved()`/`isPro()`/
+`sensorName()`). Für ein frisch hinzugefügtes, noch nicht aufgelöstes
+Ziel ist unklar, ob PRO - bis zur ersten erfolgreichen SNMP-Identitäts-
+Auflösung wird nur eine Zeile (Sensor 1) angezeigt, die zweite erscheint
+danach automatisch.
+
+### Entfernen-Button nur in der ersten Sensor-Zeile
+"Entfernen" bezieht sich auf das ganze Ziel (beide Sensoren), nicht auf
+einen einzelnen Sensor - der Button erscheint daher nur in der Sensor-1-
+Zeile, auch wenn das Ziel PRO ist und zwei Zeilen hat.
+
+Erneut mit `pio run` gebaut (erfolgreich) und per `pio run --target
+upload` geflasht.
+
+### Nachtrag: StatusBar hatte denselben Redraw-Cache-Bug, urspruenglich uebersehen
+Nutzer meldete nach dem ersten Hardware-Test: die obere Statusleiste wird
+nach dem Schliessen eines Menüs (Zahnrad/Info) nicht zuverlässig neu
+gezeichnet. Ursache identisch zum oben behobenen `GraphManager`/`PingView`-
+Bug, nur bei `StatusBar` selbst nicht mit-behoben: `lastStatusBarMs = 0`
+in `main.cpp` erzwingt zwar den naechsten `draw()`-Aufruf, aber `draw()`
+hat einen eigenen Diff-Cache (`everDrawn`/`lastBars`/...) und zeichnet bei
+unveraenderten Werten trotzdem nichts (siehe Korrektur-Hinweis beim
+ursprünglichen P4/P5-Eintrag oben). Fix: `StatusBar::forceRedraw()`
+ergänzt, nach `InfoUI::run()`/`settingsUI.run()` aufgerufen, analog zu
+`graph.forceRedraw()`/`pingView.forceRedraw()`. Erneut geflasht, Nutzer hat
+am Geraet bestätigt: "sieht gut aus".

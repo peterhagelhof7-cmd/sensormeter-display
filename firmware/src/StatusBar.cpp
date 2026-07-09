@@ -74,7 +74,7 @@ void StatusBar::drawInfoIcon(TFT_eSPI &tft, int16_t cx, int16_t cy, int16_t r, u
 
 void StatusBar::draw(DisplayManager &display, WlanManager &wlan, bool sensorValid, float tempC,
                       float humidityPct, const String &timeHHMM, const String &dateLine,
-                      bool showBottomBar, uint16_t bgColor) {
+                      bool showBottomBar, uint16_t bgColor, const String &alertSource, bool alertBlue) {
 	int8_t bars = wlan.signalBars();
 	bool blinking = bars < 0; // Symbol animiert sich selbst, siehe drawWifiIcon()
 	int tempRounded = sensorValid ? static_cast<int>(lroundf(tempC)) : 0;
@@ -83,7 +83,8 @@ void StatusBar::draw(DisplayManager &display, WlanManager &wlan, bool sensorVali
 	bool changed = !everDrawn || bars != lastBars || sensorValid != lastSensorValid ||
 	               tempRounded != lastTempRounded || humidityRounded != lastHumidityRounded ||
 	               timeHHMM != lastTimeHHMM || dateLine != lastDateLine ||
-	               showBottomBar != lastShowBottomBar || bgColor != lastBgColor;
+	               showBottomBar != lastShowBottomBar || bgColor != lastBgColor ||
+	               alertSource != lastAlertSource || alertBlue != lastAlertBlue;
 	if (!changed && !blinking) {
 		return;
 	}
@@ -96,6 +97,8 @@ void StatusBar::draw(DisplayManager &display, WlanManager &wlan, bool sensorVali
 	lastDateLine = dateLine;
 	lastShowBottomBar = showBottomBar;
 	lastBgColor = bgColor;
+	lastAlertSource = alertSource;
+	lastAlertBlue = alertBlue;
 
 	TFT_eSPI &tft = display.raw();
 
@@ -106,6 +109,18 @@ void StatusBar::draw(DisplayManager &display, WlanManager &wlan, bool sensorVali
 	drawGearIcon(tft, 18, Layout::kStatusBarHeight / 2, 11, bgColor);
 	drawWifiIcon(tft, 44, Layout::kStatusBarHeight / 2 - 8, bars);
 	drawInfoIcon(tft, 92, Layout::kStatusBarHeight / 2, 11, bgColor);
+
+	// Warnschwellwert-Quelle ("Intern"/"Sensormeter"/"Ping"): dauerhaft
+	// (nicht blinkend) angezeigt, damit auch waehrend der weissen Phase des
+	// blinkenden Alarm-Hintergrunds erkennbar bleibt, welche Quelle
+	// betroffen ist. Farbe zeigt die Richtung (rot=Ueberschreitung/Ausfall,
+	// blau=Unterschreitung), unabhaengig von der aktuellen Blink-Phase.
+	if (!alertSource.isEmpty()) {
+		tft.setTextColor(alertBlue ? TFT_BLUE : TFT_RED, bgColor);
+		tft.setTextDatum(ML_DATUM);
+		tft.setTextFont(2);
+		tft.drawString(alertSource, 110, Layout::kStatusBarHeight / 2);
+	}
 
 	tft.setTextColor(kIconColor, bgColor);
 	tft.setTextDatum(MR_DATUM);

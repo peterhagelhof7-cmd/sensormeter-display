@@ -176,9 +176,14 @@ hinterlegen (kein automatisches Discovery).
 
 9. FEHLERBEHANDLUNG
 
-- Ping schlägt länger als 1 Minute fehl (Ziel google.com):
-  - Status-LED blinkt rot
-  - Display-Hintergrundfarbe wechselt auf rot
+- Ping schlägt länger als 1 Minute fehl (Ziel google.com) ODER ein
+  Warnschwellwert ist über-/unterschritten (siehe Abschnitt 11,
+  Nachtrag über den ursprünglichen Beschreibung.txt-Umfang hinaus):
+  - Status-LED blinkt (500ms-Takt)
+  - Display-Hintergrund blinkt (1s-Takt) - rot bei Überschreitung/Ausfall,
+    blau bei Unterschreitung eines Minimalwerts
+  - Statusleiste zeigt die betroffene Quelle ("Intern"/"Sensormeter"/
+    "Ping", ggf. "+N" bei mehreren gleichzeitig betroffenen Quellen)
 - WLAN nicht verbunden: WLAN-Symbol blinkt (siehe 4.)
 
 ------------------------------------------------------------
@@ -188,7 +193,8 @@ hinterlegen (kein automatisches Discovery).
 - WLAN-Zugangsdaten (SSID/PSK)
 - Touch-Kalibrierdaten
 - Systemeinstellungen: Betriebsmodus, Slide-Intervall, Static-Datenquelle,
-  Helligkeit, Ping-Ziele (IP-Liste), Sensormeter-Zielgerät (IP + Community)
+  Helligkeit, Ping-Ziele (IP-Liste), Sensormeter-Zielgerät(e) (IP + Community),
+  Warnschwellwerte (DHT11/Sensormeter/Ping), DHT11-Kalibrierkorrektur
 - history.csv: DHT11-Verlauf, Ringpuffer 24 Einträge (siehe 7.1)
 - Snake-Highscore
 
@@ -196,19 +202,35 @@ hinterlegen (kein automatisches Discovery).
 
 11. WEBSERVER (ZUSATZFUNKTION, NICHT TEIL VON BESCHREIBUNG.TXT)
 
-Nachtrag nach P0-P8: ein schlanker Einstellungs-Webserver (Port 80,
-HTTP-Basic-Auth, Benutzername "admin", Passwort einstellbar) ergänzt die
-Touch-Bedienung um eine Fernkonfigurations-Möglichkeit:
+Nachtrag nach P0-P8: ein Webserver (Port 80) ergänzt die Touch-Bedienung
+um eine Fernkonfigurations- UND Fernanzeige-Möglichkeit, aufgeteilt in
+zwei Seiten:
+
+Öffentliches Status-Dashboard ("/", NICHT passwortgeschützt, Auto-Refresh
+alle 30s, rein lesend):
+- Aktuelle DHT11-Werte + Verlaufsgraph (inline SVG, inkl. Achsenbeschriftung
+  und Warnschwellwert-Linien)
+- WLAN-Status (Signalbalken, IP)
+- Sensormeter-Ziele mit aktuellen Messwerten
+- Ping-Status (google.com + Zusatzziele)
+- Alarmbanner bei überschrittenem Warnschwellwert
+
+Einstellungsbereich ("/settings", HTTP-Basic-Auth, Benutzername "admin",
+Passwort einstellbar):
 - Systemname, Web-Passwort
 - Betriebsmodus (Slide + Intervall / Static + Datenquelle)
 - Helligkeit
-- Sensormeter-Ziel (IP + Community)
+- Sensormeter-Ziel(e) (IP + Community, IP nachträglich änderbar)
 - Ping-Ziele (hinzufügen/entfernen, max. 5)
+- Warnschwellwerte (DHT11 intern, Sensormeter pro Ziel/Sensor, Ping-Latenz)
+  - bei Über-/Unterschreitung blinkt der Bildschirm rot/blau, LED und
+    Statusleiste zeigen die betroffene Quelle (siehe Abschnitt 9)
+- DHT11-Kalibrierkorrektur (fester Temperatur-/Feuchte-Versatz, ganzzahlig)
 - Firmware-Update per lokalem .bin-Upload (kein Remote-Versionscheck,
   siehe docs/entscheidungen.md)
 
-Kein REST-API/JSON, kein Status-Dashboard - die Touch-Oberfläche bleibt die
-primäre Anzeige, der Webserver dient ausschließlich der Konfiguration.
+Kein REST-API/JSON - das Dashboard ist reines HTML mit inline SVG, keine
+eigene API zum programmgesteuerten Abfragen.
 
 ------------------------------------------------------------
 

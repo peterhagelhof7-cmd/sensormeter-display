@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <math.h>
 
 #include "DisplayManager.h"
 #include "TouchManager.h"
@@ -23,6 +24,7 @@
 #include "OtaManager.h"
 #include "WebServerManager.h"
 #include "InfoUI.h"
+#include "AlertEvaluator.h"
 
 DisplayManager display;
 TouchManager touch;
@@ -41,7 +43,7 @@ SettingsManager settings;
 BacklightManager backlight;
 SettingsUI settingsUI;
 OtaManager ota;
-WebServerManager webServer(settings, backlight, ota, wlan);
+WebServerManager webServer(settings, backlight, ota, wlan, sensormeterManager, sensor, pingManager, graph);
 
 uint32_t lastStatusBarMs = 0;
 // 300ms statt z.B. 1000ms, damit das 500ms-Blinken des WLAN-Symbols nicht
@@ -124,6 +126,9 @@ void loop() {
 		settingsUI.run(display, touch, wlan, settings, backlight, onboarding);
 		contentDirty = true;
 		lastStatusBarMs = 0;
+		graph.forceRedraw();
+		pingView.forceRedraw();
+		statusBar.forceRedraw();
 	}
 
 	// Info-Symbol antippbar - oeffnet InfoUI (Systemname/IP/DHCP-Static),
@@ -136,21 +141,43 @@ void loop() {
 		InfoUI::run(display, touch, settings, wlan);
 		contentDirty = true;
 		lastStatusBarMs = 0;
+		graph.forceRedraw();
+		pingView.forceRedraw();
+		statusBar.forceRedraw();
 	}
 
-	bool dhtPolled = sensor.update();
+	// Ansichtswechsel per Tippen auf die linke (vorige) bzw. rechte
+	// (naechste) Bildschirmhaelfte im Inhaltsbereich - zusaetzlich zum
+	// automatischen Wechsel im Slide-Modus. Im Static-Modus gibt es keine
+	// "naechste" Ansicht (Nutzer hat genau eine feste Quelle gewaehlt,
+	// siehe SettingsUI), daher dort ohne Wirkung.
+	if (touchedNow && settings.mode() == OperatingMode::Slide && ty >= Layout::kContentTop &&
+	    ty < Layout::kContentBottom) {
+		bool tappedLeft = tx < DisplayManager::kScreenWidth / 2;
+		while (touch.read(tx, ty)) {
+			delay(15);
+		}
+		slideIndex = (slideIndex + (tappedLeft ? kAvailableDataSourceCount - 1 : 1)) % kAvailableDataSourceCount;
+		slideLastSwitchMs = millis();
+		contentDirty = true;
+	}
+
+	bool dhtPolled = sensor.update(settings);
 	if (dhtPolled) {
 		graph.maybeRecord(sensor.temperatureC(), sensor.humidityPercent());
 	}
 	bool sensormeterPolled = sensormeterManager.update(settings);
 	bool pingPolled = pingManager.update(settings);
 
-	// Anhaltender Ping-Fehler (>1 Min. an google.com): LED blinkt rot und
-	// die gesamte Anzeige wechselt auf roten Hintergrund (lastenheft.txt
-	// Abschnitt 9), unabhaengig von der gerade aktiven Datenquelle.
-	bool alertActive = pingManager.isFailingOver1Min();
-	led.update(alertActive);
-	uint16_t bgColor = alertActive ? TFT_RED : TFT_WHITE;
+	// Anhaltender Ping-Fehler (>1 Min.) oder ueberschrittener Warnschwellwert:
+	// LED und Bildschirmhintergrund blinken (1s Taktwechsel) rot
+	// (Ueberschreitung/Ausfall) bzw. blau (Unterschreitung), unabhaengig von
+	// der gerade aktiven Datenquelle (lastenheft.txt Abschnitt 9 + Nutzer-
+	// Erweiterung um Warnschwellwerte, siehe docs/entscheidungen.md).
+	AlertInfo alert = computeAlertInfo(sensor, sensormeterManager, pingManager, settings);
+	led.update(alert.active, alert.blue);
+	bool blinkOn = (millis() / 1000) % 2 == 0;
+	uint16_t bgColor = (alert.active && blinkOn) ? (alert.blue ? TFT_BLUE : TFT_RED) : TFT_WHITE;
 
 	DataSource activeSource = currentActiveSource();
 	bool showBottomBar = !(settings.mode() == OperatingMode::Static && activeSource == DataSource::Uhrzeit);
@@ -171,17 +198,19 @@ void loop() {
 	                        (activeSource == DataSource::Sensormeter && sensormeterPolled) ||
 	                        ((activeSource == DataSource::Ping || activeSource == DataSource::PingTargets) &&
 	                         pingPolled);
-	// Alarmzustand kann sich jederzeit aendern (z.B. genau nach 60s Ausfall) -
-	// erzwingt in dem Fall ebenfalls ein Neuzeichnen, auch ohne neue Messung.
-	static bool lastAlertActive = false;
-	bool alertChanged = (alertActive != lastAlertActive);
-	lastAlertActive = alertActive;
+	// bgColor aendert sich nicht nur bei An-/Abklingen eines Alarms, sondern
+	// auch bei jedem 1s-Blink-Taktwechsel waehrend ein Alarm aktiv ist -
+	// erzwingt in beiden Faellen ein Neuzeichnen, auch ohne neue Messung.
+	static uint16_t lastLoopBgColor = TFT_WHITE;
+	bool bgColorChanged = (bgColor != lastLoopBgColor);
+	lastLoopBgColor = bgColor;
 
-	if (contentDirty || sourceJustPolled || periodicDue || alertChanged) {
+	if (contentDirty || sourceJustPolled || periodicDue || bgColorChanged) {
 		switch (activeSource) {
 			case DataSource::Dht11:
 				graph.drawFullScreen(display, sensor.temperatureC(), sensor.humidityPercent(),
-				                     sensor.hasValidReading(), bgColor);
+				                     sensor.hasValidReading(), settings.dhtTempMinC(), settings.dhtTempMaxC(),
+				                     settings.dhtHumMinPct(), settings.dhtHumMaxPct(), bgColor);
 				break;
 			case DataSource::Uhrzeit:
 				clockView.draw(display, Layout::kContentTop, contentBottom, bgColor);
@@ -202,9 +231,20 @@ void loop() {
 
 	if (now - lastStatusBarMs >= kStatusBarIntervalMs) {
 		lastStatusBarMs = now;
+		// alert.extraCount > 0: weitere Kategorien sind ZUSAETZLICH zu
+		// alert.source gerade auch ausserhalb der Spec, aber in der
+		// schmalen Statusleiste passt nur eine Quelle - "+N" macht
+		// wenigstens sichtbar, dass da noch mehr ist (Nutzerwunsch).
+		String alertLabel;
+		if (alert.active) {
+			alertLabel = String(alert.source);
+			if (alert.extraCount > 0) {
+				alertLabel += " +" + String(alert.extraCount);
+			}
+		}
 		statusBar.draw(display, wlan, sensor.hasValidReading(), sensor.temperatureC(),
 		               sensor.humidityPercent(), TimeSync::formatTime(), TimeSync::formatDate(),
-		               showBottomBar, bgColor);
+		               showBottomBar, bgColor, alertLabel, alert.blue);
 	}
 
 	delay(20);

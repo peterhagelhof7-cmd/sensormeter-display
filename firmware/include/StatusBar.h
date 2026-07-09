@@ -31,9 +31,24 @@ public:
 
 	// showBottomBar=false laesst die untere Leiste komplett weg (Static-Modus
 	// mit Datenquelle "Uhrzeit" - siehe lastenheft.txt Abschnitt 6.2).
+	// alertSource: leer = kein Warnschwellwert ueberschritten, sonst z.B.
+	// "Intern"/"Sensormeter"/"Ping" (siehe main.cpp::computeAlertInfo()) -
+	// wird dauerhaft angezeigt (nicht blinkend), damit auch in der
+	// "aus"-Phase des blinkenden Bildschirmhintergrunds erkennbar bleibt,
+	// welche Quelle ausserhalb der Spec liegt. alertBlue waehlt die
+	// Textfarbe (rot=Ueberschreitung/Ausfall, blau=Unterschreitung).
 	void draw(DisplayManager &display, WlanManager &wlan, bool sensorValid, float tempC,
 	          float humidityPct, const String &timeHHMM, const String &dateLine,
-	          bool showBottomBar = true, uint16_t bgColor = TFT_WHITE);
+	          bool showBottomBar = true, uint16_t bgColor = TFT_WHITE, const String &alertSource = String(),
+	          bool alertBlue = false);
+
+	// Verwirft den Redraw-Cache: noetig, wenn zwischenzeitlich ein anderer
+	// Bildschirm (InfoUI/SettingsUI) den ganzen Screen ueberschrieben hat -
+	// sonst zeichnet draw() bei unveraenderten Werten faelschlich gar
+	// nichts, siehe main.cpp und GraphManager::forceRedraw(). Das bisherige
+	// `lastStatusBarMs = 0` in main.cpp erzwang nur den naechsten
+	// draw()-Aufruf, nicht dass darin auch tatsaechlich neu gezeichnet wird.
+	void forceRedraw() { everDrawn = false; }
 
 private:
 	void drawGearIcon(TFT_eSPI &tft, int16_t cx, int16_t cy, int16_t r, uint16_t bgColor) const;
@@ -55,4 +70,6 @@ private:
 	String lastDateLine;
 	bool lastShowBottomBar = true;
 	uint16_t lastBgColor = 0;
+	String lastAlertSource;
+	bool lastAlertBlue = false;
 };

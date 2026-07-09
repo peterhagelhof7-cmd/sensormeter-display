@@ -17,11 +17,11 @@ void LedManager::setColor(bool r, bool g, bool b) {
 	digitalWrite(LED_B_PIN, b ? LOW : HIGH);
 }
 
-void LedManager::update(bool alertActive) {
+void LedManager::update(bool alertActive, bool blue) {
 	if (!alertActive) {
 		setColor(false, false, false);
 		return;
 	}
 	bool on = (millis() / 500) % 2 == 0;
-	setColor(on, false, false);
+	setColor(on && !blue, false, on && blue);
 }

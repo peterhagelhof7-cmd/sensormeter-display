@@ -33,6 +33,10 @@ void PingManager::pingNextTarget(const SettingsManager &settings) {
 	targets[i].ip = ip;
 	targets[i].ok = Ping.ping(ip.c_str(), 1);
 	targets[i].checked = true;
+	if (targets[i].ok) {
+		targets[i].lastLatencyMs = static_cast<float>(Ping.averageTime());
+		targets[i].hasLatency = true;
+	}
 
 	nextTargetIndex = (nextTargetIndex + 1) % numTargets;
 }

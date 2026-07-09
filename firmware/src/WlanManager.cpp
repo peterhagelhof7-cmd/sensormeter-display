@@ -141,10 +141,43 @@ bool WlanManager::autoConnect(uint32_t timeoutMs) {
 
 int8_t WlanManager::signalBars() const {
 	if (!isConnected()) {
+		smoothedRssi = NAN;
+		lastBars = -1;
 		return -1; // kein WLAN - Symbol soll blinken
 	}
-	int32_t rssi = WiFi.RSSI();
-	if (rssi >= -60) return 3;
-	if (rssi >= -75) return 2;
-	return 1;
+
+	float rssi = static_cast<float>(WiFi.RSSI());
+	smoothedRssi = isnan(smoothedRssi) ? rssi : (smoothedRssi * 0.8f + rssi * 0.2f);
+
+	// Hysterese gegen Balken-Flackern (Hardware-Befund: RSSI pendelte knapp
+	// um die -60dBm-Schwelle, dadurch schneller Sprung zwischen 2 und 3
+	// Balken jede StatusBar-Aktualisierung). Ein Schwellenwechsel muss den
+	// alten Grenzwert um kHysteresisDb ueber-/unterschreiten, je nach
+	// Richtung - direkt am Grenzwert bleibt die zuletzt gezeigte Stufe
+	// stabil.
+	constexpr float kHysteresisDb = 4.0f;
+	constexpr float kThreshold32 = -60.0f; // Grenze zwischen 2 und 3 Balken
+	constexpr float kThreshold21 = -75.0f; // Grenze zwischen 1 und 2 Balken
+
+	int8_t bars;
+	if (lastBars < 1) {
+		// Erste Messung nach Verbindungsaufbau: kein Vorzustand fuer die
+		// Hysterese vorhanden, direkt ohne Toleranz einordnen.
+		bars = (smoothedRssi >= kThreshold32) ? 3 : (smoothedRssi >= kThreshold21 ? 2 : 1);
+	} else {
+		bars = lastBars;
+		if (bars == 3 && smoothedRssi < kThreshold32 - kHysteresisDb) {
+			bars = 2;
+		} else if (bars == 1 && smoothedRssi >= kThreshold21 + kHysteresisDb) {
+			bars = 2;
+		} else if (bars == 2) {
+			if (smoothedRssi >= kThreshold32 + kHysteresisDb) {
+				bars = 3;
+			} else if (smoothedRssi < kThreshold21 - kHysteresisDb) {
+				bars = 1;
+			}
+		}
+	}
+	lastBars = bars;
+	return bars;
 }

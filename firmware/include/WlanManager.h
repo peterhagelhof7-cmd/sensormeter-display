@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <Preferences.h>
+#include <math.h>
 #include <vector>
 
 // Verwaltet WLAN-Scan, -Verbindung und die Zugangsdaten im Flash (NVS).
@@ -49,4 +50,13 @@ public:
 
 private:
 	Preferences prefs;
+
+	// Redraw-nahes Flackern der Balkenanzeige (RSSI pendelte knapp um eine
+	// Schwelle wie -60dBm, dadurch schneller Wechsel zwischen 2 und 3
+	// Balken) - geglaetteter RSSI-Wert plus Hysterese beim Schwellenwechsel
+	// beheben das, siehe WlanManager.cpp. mutable, da signalBars() const ist
+	// (wird bei jedem StatusBar::draw()-Aufruf gelesen, aendert aber
+	// intern geglaetteten Zustand).
+	mutable float smoothedRssi = NAN;
+	mutable int8_t lastBars = -1;
 };

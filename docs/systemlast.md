@@ -20,13 +20,17 @@ Zwei Datenquellen, klar getrennt nach Belastbarkeit:
 | P7/P8 | 68,2 % (893.741 B) | 14,3 % (46.704 B) | +16.740 B | SNMP-Client, Ping-Überwachung, LED |
 | P6 | 68,4 % (896.165 B) | 14,3 % (46.840 B) | +2.424 B | Snake (keine neue Bibliothek nötig) |
 | Webserver+OTA | 73,3 % (960.453 B) | 14,4 % (47.240 B) | +64.288 B | ESPAsyncWebServer/AsyncTCP, OTA, eigene Partitionstabelle |
+| Warnschwellwerte | 75,1 % (984.085 B) | 14,7 % (48.048 B) | +23.632 B | Blink-Alarm (rot/blau), Graph-Referenzlinien, Webserver-Schwellwerttabelle (pro Sensor bei PRO-Zielen) |
+| Öffentliches Dashboard | 75,8 % (993.069 B) | 14,7 % (48.056 B) | +8.984 B | Zweite Webseite (Status-Dashboard, kein Login), Design aus Admin-Guide übernommen |
+| Dashboard-Feinschliff | 76,2 % (998.385 B) | 14,7 % (48.064 B) | +5.316 B | SVG-Verlaufsgraph, Ziel-IP änderbar, NTP-Sync-Anzeige, Rahmenbreite vereinheitlicht |
 
-**Reserve:** 1.310.720 − 960.453 = **350.267 Byte Flash frei je App-Slot
-(26,7 %)**, 280.440 von 327.680 Byte statisches RAM frei (85,6 %) → viel
-Luft für Heap/Stack zur Laufzeit (WiFi/TCP-Puffer, TFT_eSPI-Textpuffer).
-Alle Werte stammen direkt aus `pio run`, keine Schätzung. Flash-Reserve
-bezieht sich auf je einen der beiden OTA-App-Slots (`ota_0`/`ota_1`), siehe
-`partitions_ota.csv` und `docs/entscheidungen.md`.
+**Reserve (Stand Dashboard-Feinschliff):** 1.310.720 − 998.385 = **312.335
+Byte Flash frei je App-Slot (23,8 %)**, 279.616 von 327.680 Byte statisches
+RAM frei (85,3 %) → weiterhin viel Luft für Heap/Stack zur Laufzeit
+(WiFi/TCP-Puffer, TFT_eSPI-Textpuffer). Alle Werte stammen direkt aus
+`pio run`, keine Schätzung. Flash-Reserve bezieht sich auf je einen der
+beiden OTA-App-Slots (`ota_0`/`ota_1`), siehe `partitions_ota.csv` und
+`docs/entscheidungen.md`.
 
 Auffällig: P1 (WLAN) kostet mit Abstand am meisten Flash (WiFi/LWIP-Stack
 wird hier erstmals gelinkt) - alle folgenden netzwerkbezogenen Phasen

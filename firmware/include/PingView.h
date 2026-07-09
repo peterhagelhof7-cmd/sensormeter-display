@@ -14,6 +14,14 @@ public:
 	void drawTargetList(DisplayManager &display, const PingManager &ping, int16_t contentTop,
 	                     int16_t contentBottom, uint16_t bgColor);
 
+	// Verwirft beide Redraw-Caches: noetig, wenn zwischenzeitlich ein
+	// anderer Bildschirm (InfoUI/SettingsUI) den ganzen Screen
+	// ueberschrieben hat, siehe main.cpp und GraphManager::forceRedraw().
+	void forceRedraw() {
+		everDrawnAvg = false;
+		everDrawnList = false;
+	}
+
 private:
 	// Redraw-Cache wie in StatusBar/GraphManager (siehe dort/docs/entscheidungen.md):
 	// PingManager pollt alle 2s, ein bedingungsloser Full-Redraw bei jedem

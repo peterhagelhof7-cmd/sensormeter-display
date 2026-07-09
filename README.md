@@ -11,9 +11,11 @@ ST7789P3 TFT, 240x320, resistiver 4-Draht-Touch). Zeigt wahlweise
 Innenraumklima (DHT11), Uhrzeit/Datum, Messwerte des
 [Sensormeter](https://github.com/peterhagelhof7-cmd/sensormeter)-Projekts
 (SNMP) oder Ping-Laufzeiten an. WLAN-Konfiguration und Bedienung direkt am
-Gerät per Touch, keine Cloud-Anbindung. Zusätzlich ein schlanker
-Einstellungs-Webserver (Systemname, Betriebsmodus, Ping-Ziele,
-Sensormeter-Ziel) inkl. lokalem OTA-Update per `.bin`-Upload.
+Gerät per Touch, keine Cloud-Anbindung. Zusätzlich ein öffentliches,
+nicht passwortgeschütztes Status-Dashboard sowie ein passwortgeschützter
+Einstellungs-Webserver (Systemname, Betriebsmodus, Ping-/Sensormeter-Ziele,
+Warnschwellwerte, DHT11-Kalibrierkorrektur) inkl. lokalem OTA-Update per
+`.bin`-Upload.
 
 [**One-Pager (PDF)**](docs/sensormeter-display-onepager.pdf) — kompakte Projektübersicht auf einer Seite.
 
@@ -22,11 +24,12 @@ Sensormeter-Ziel) inkl. lokalem OTA-Update per `.bin`-Upload.
 | Datei | Inhalt |
 |---|---|
 | [docs/sensormeter-display-onepager.pdf](docs/sensormeter-display-onepager.pdf) | One-Pager: Projektübersicht, Architektur, Kennzahlen auf einer Seite |
+| [docs/admin-guide.pdf](docs/admin-guide.pdf) | Admin-Guide: Inbetriebnahme, Touch-Bedienung, Konfiguration über die Weboberfläche |
 | [docs/projektfamilie.html](docs/projektfamilie.html) | Architekturskizze: wie die drei Sensormeter-Projekte zusammenhängen |
 | [docs/lastenheft.txt](docs/lastenheft.txt) | Fachliche Anforderungen: Hardware, GUI, Betriebsarten, Datenquellen, Fehlerbehandlung, Webserver-Nachtrag |
 | [docs/pflichtenheft.txt](docs/pflichtenheft.txt) | Technische Umsetzung: alle Softwaremodule, NVS-/LittleFS-Datenspeicherung, Startup-Flow, Fehlerbehandlung, Nebenläufigkeit |
 | [docs/implementierungsplan.html](docs/implementierungsplan.html) | Visueller Implementierungsplan P0–P8 (lokal im Browser öffnen) |
-| [docs/entscheidungen.md](docs/entscheidungen.md) | Entscheidungsprotokoll: Pinbelegung, Touch-Ansteuerung, Mutex-Fix, Partitionstabelle |
+| [docs/entscheidungen.md](docs/entscheidungen.md) | Entscheidungsprotokoll: Pinbelegung, Touch-Ansteuerung, Mutex-Fix, Partitionstabelle, Warnschwellwerte, Status-Dashboard |
 | [docs/stueckliste.md](docs/stueckliste.md) | Bauteile pro Gerät + Werkzeug |
 | [docs/systemlast.md](docs/systemlast.md) | Flash/RAM je Phase (gemessen), Blockierzeit-Abschätzung, identifiziertes Ping-Timeout-Risiko |
 | [docs/stromversorgung.md](docs/stromversorgung.md) | Strombudget pro Komponente + Netzteilempfehlung |
@@ -50,7 +53,7 @@ Hardware-Alternative (ESP32-S3/Heemol) wurden bewusst **nicht** übernommen.
 
 `firmware/` ist ein PlatformIO-Projekt (Board `esp32dev`, Framework Arduino).
 
-**Version:** `0.9.0-rc1` (Beta) — Versionsschema siehe
+**Version:** `0.9.0-rc2` (Beta) — Versionsschema siehe
 [docs/entscheidungen.md](docs/entscheidungen.md#versionierung).
 
 Aktueller Stand: **P0–P8 vollständig** (siehe
@@ -103,19 +106,27 @@ Enthalten (P0–P8):
   Snake, Systemeinstellungen (Helligkeit ±, WLAN neu wählen,
   Sensormeter-Ziel, Ping-Ziele über
   `NumericKeypad`) — alles in NVS persistiert
-- Einstellungs-Webserver (`WebServerManager`, async über
-  ESPAsyncWebServer/AsyncTCP, HTTP-Basic-Auth): Systemname, Web-Passwort,
-  Betriebsmodus, Helligkeit, Sensormeter-Ziel, Ping-Ziele (hinzufügen/
-  entfernen) — spiegelt einen Teil der Touch-Einstellungen für
-  Fernkonfiguration, siehe `docs/lastenheft.txt` Abschnitt 11
+- Webserver (`WebServerManager`, async über ESPAsyncWebServer/AsyncTCP)
+  mit zwei Seiten: ein öffentliches, NICHT passwortgeschütztes
+  Status-Dashboard (`/`, alle aktuellen Werte inkl. DHT11-Verlaufsgraph
+  als SVG, Auto-Refresh alle 30s) und ein per HTTP-Basic-Auth
+  geschützter Einstellungsbereich (`/settings`: Systemname, Web-Passwort,
+  Betriebsmodus, Helligkeit, Sensormeter-/Ping-Ziele inkl. Warnschwellwerte,
+  DHT11-Kalibrierkorrektur, Netzwerk) — spiegelt einen Teil der
+  Touch-Einstellungen für Fernkonfiguration, siehe `docs/lastenheft.txt`
+  Abschnitt 11
+- Warnschwellwerte (DHT11 intern, Sensormeter pro Ziel/Sensor, Ping-Latenz):
+  bei Über-/Unterschreitung blinkt der Bildschirm rot/blau, LED und
+  Statusleiste zeigen die betroffene Quelle - nur über den Webserver
+  einstellbar, siehe `docs/entscheidungen.md`
 - OTA-Update (`OtaManager`): lokaler `.bin`-Upload über die
   Einstellungsseite (kein Remote-Versionscheck, siehe
   `docs/entscheidungen.md`), eigene Zwei-Slot-Partitionstabelle
   (`partitions_ota.csv`)
 
-Noch nicht verifiziert: reale Hardware (TFT-Pinbelegung über ein passendes
-Referenzdesign erschlossen, nicht am eigenen Board nachgemessen — siehe
-`docs/entscheidungen.md`).
+Auf echter Hardware verifiziert (wiederholt geflasht und getestet,
+siehe `docs/entscheidungen.md` für die dabei gefundenen und behobenen
+Bugs).
 
 **Auf einem anderen/frischen Windows-PC**: [`scripts/flash.ps1`](scripts/flash.ps1)
 (oder `.cmd` zum Doppelklicken) fragt zuerst, welches der drei
