@@ -4,6 +4,7 @@
 #include <Preferences.h>
 #include <freertos/semphr.h>
 #include <stdint.h>
+#include <time.h>
 
 #include "DataSource.h"
 
@@ -61,6 +62,12 @@ public:
 	int16_t dhtTempOffsetC() const;
 	int16_t dhtHumOffsetPct() const;
 	void setDhtOffsets(int16_t tempOffsetC, int16_t humOffsetPct);
+	// Wall-Clock-Zeitpunkt (time(nullptr)), zu dem die Offsets zuletzt
+	// TATSAECHLICH geaendert wurden (nicht nur gespeichert - setDhtOffsets()
+	// aktualisiert diesen Zeitstempel nur, wenn sich mindestens einer der
+	// beiden Werte gegenueber dem bisherigen unterscheidet). 0 = noch nie
+	// kalibriert. Persistiert in NVS, ueberlebt also einen Neustart.
+	time_t dhtOffsetSetTime() const;
 
 	// Bis zu kMaxSensormeterTargets Ziele, eine gemeinsame SNMP-Community fuer
 	// alle (siehe docs/entscheidungen.md). Wie bei den Ping-Zielen ist 0 der
@@ -150,10 +157,11 @@ private:
 	size_t pingTargetCount_ = 0;
 
 	String deviceName_ = "Sensormeter Display";
-	String webPassword_ = "admin";
+	String webPassword_ = "installer";
 
 	int16_t dhtTempOffsetC_ = 0;
 	int16_t dhtHumOffsetPct_ = 0;
+	uint32_t dhtOffsetSetTs_ = 0;
 
 	int16_t dhtTempMinC_ = kThresholdDisabled;
 	int16_t dhtTempMaxC_ = kThresholdDisabled;

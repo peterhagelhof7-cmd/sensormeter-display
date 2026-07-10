@@ -48,6 +48,11 @@ private:
 	String dataSourceOptions(DataSource selected) const;
 	String dhtGraphSvg() const;
 	String wifiBarsHtml(int8_t bars) const;
+	// Klartext-Dump aller SettingsManager-Werte fuer /settings/export (siehe
+	// docs/entscheidungen.md) - analog zum config.xml-Export bei Sensormeter/
+	// Sensormeter WLAN, hier als text/plain, da SettingsManager NVS-basiert
+	// ist und kein XML-Dokument fuehrt.
+	String buildConfigExport() const;
 
 	void handleSave(AsyncWebServerRequest *request);
 	void handlePingAdd(AsyncWebServerRequest *request);

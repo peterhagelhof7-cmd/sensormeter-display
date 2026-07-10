@@ -38,6 +38,7 @@ void SettingsManager::load() {
 
 	dhtTempOffsetC_ = prefs.getShort("dTOff", 0);
 	dhtHumOffsetPct_ = prefs.getShort("dHOff", 0);
+	dhtOffsetSetTs_ = prefs.getUInt("dTOffTs", 0);
 
 	dhtTempMinC_ = prefs.getShort("dTMin", kThresholdDisabled);
 	dhtTempMaxC_ = prefs.getShort("dTMax", kThresholdDisabled);
@@ -92,6 +93,7 @@ void SettingsManager::save() {
 	prefs.putString("webPw", webPassword_);
 	prefs.putShort("dTOff", dhtTempOffsetC_);
 	prefs.putShort("dHOff", dhtHumOffsetPct_);
+	prefs.putUInt("dTOffTs", dhtOffsetSetTs_);
 	prefs.end();
 }
 
@@ -223,8 +225,24 @@ int16_t SettingsManager::dhtHumOffsetPct() const {
 	return v;
 }
 
+time_t SettingsManager::dhtOffsetSetTime() const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	uint32_t v = dhtOffsetSetTs_;
+	xSemaphoreGive(mutex_);
+	return static_cast<time_t>(v);
+}
+
 void SettingsManager::setDhtOffsets(int16_t tempOffsetC, int16_t humOffsetPct) {
 	xSemaphoreTake(mutex_, portMAX_DELAY);
+	// Zeitstempel nur bei TATSAECHLICHER Aenderung aktualisieren - setDhtOffsets()
+	// wird bei jedem Speichern der Einstellungsseite aufgerufen (Kalibrierung
+	// und Warnschwellwerte teilen sich ein Formular), nicht nur wenn die
+	// Kalibrierung selbst geaendert wurde. Ohne diese Pruefung wuerde
+	// "Zuletzt kalibriert" bei jedem beliebigen Speichern auf "jetzt"
+	// springen, auch wenn sich die Offsets gar nicht geaendert haben.
+	if (tempOffsetC != dhtTempOffsetC_ || humOffsetPct != dhtHumOffsetPct_) {
+		dhtOffsetSetTs_ = static_cast<uint32_t>(time(nullptr));
+	}
 	dhtTempOffsetC_ = tempOffsetC;
 	dhtHumOffsetPct_ = humOffsetPct;
 	save();

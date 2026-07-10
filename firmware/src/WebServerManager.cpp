@@ -1,5 +1,6 @@
 #include "WebServerManager.h"
 
+#include <ESP32Ping.h>
 #include <Update.h>
 #include <math.h>
 #include <time.h>
@@ -51,6 +52,18 @@ uint16_t parseOptionalPingMs(AsyncWebServerRequest *request, const char *name) {
 	if (ms < 0) ms = 0;
 	if (ms > 65535) ms = 65535;
 	return static_cast<uint16_t>(ms);
+}
+
+// Sicherheits-Feature: vor dem Uebernehmen einer neu gesetzten statischen
+// WLAN-IP prueft dies per Ping, ob im Netz bereits ein Geraet unter dieser
+// Adresse antwortet - falls ja, wird die IP-Vergabe abgelehnt statt eine
+// Adresskollision zu riskieren. Ping mit count=1 und der
+// Bibliotheks-Standard-Wartezeit von 1s - kurz genug, um den
+// Async-Webserver-Handler nicht spuerbar zu blockieren (siehe die anderen
+// beiden Sensormeter-Projekte, docs/entscheidungen.md).
+bool ipRespondsToPing(const IPAddress &ip) {
+	if (ip == IPAddress(0, 0, 0, 0)) return false;
+	return Ping.ping(ip, 1);
 }
 
 String thresholdAttr(int16_t v) {
@@ -457,6 +470,71 @@ String WebServerManager::buildDashboardPage() const {
 	return html;
 }
 
+String WebServerManager::buildConfigExport() const {
+	String out;
+	out.reserve(2200);
+	out += "# Sensormeter Display - Konfigurationsexport\n";
+	out += "systemname=" + settings_.deviceName() + "\n";
+	out += "betriebsmodus=" + String(settings_.mode() == OperatingMode::Slide ? "slide" : "static") + "\n";
+	if (settings_.mode() == OperatingMode::Slide) {
+		out += "slideIntervalSec=" + String(settings_.slideIntervalSec()) + "\n";
+	} else {
+		out += "staticSource=" + String(dataSourceLabel(settings_.staticSource())) + "\n";
+	}
+	out += "helligkeitProzent=" + String(settings_.brightnessPercent()) + "\n";
+
+	out += "\n[Kalibrierung intern]\n";
+	out += "dhtTempOffsetC=" + String(settings_.dhtTempOffsetC()) + "\n";
+	out += "dhtHumOffsetPct=" + String(settings_.dhtHumOffsetPct()) + "\n";
+	time_t calTs = settings_.dhtOffsetSetTime();
+	if (calTs == 0) {
+		out += "zuletztKalibriert=noch nie\n";
+	} else {
+		struct tm t;
+		localtime_r(&calTs, &t);
+		char buf[20];
+		snprintf(buf, sizeof(buf), "%02d.%02d.%04d %02d:%02d", t.tm_mday, t.tm_mon + 1, t.tm_year + 1900, t.tm_hour,
+		         t.tm_min);
+		out += "zuletztKalibriert=" + String(buf) + "\n";
+	}
+
+	out += "\n[Warnschwellwerte intern]\n";
+	out += "dhtTempMinC=" + thresholdAttr(settings_.dhtTempMinC()) + "\n";
+	out += "dhtTempMaxC=" + thresholdAttr(settings_.dhtTempMaxC()) + "\n";
+	out += "dhtHumMinPct=" + thresholdAttr(settings_.dhtHumMinPct()) + "\n";
+	out += "dhtHumMaxPct=" + thresholdAttr(settings_.dhtHumMaxPct()) + "\n";
+
+	out += "\n[Sensormeter-Ziele]\n";
+	out += "snmpCommunity=" + settings_.sensormeterCommunity() + "\n";
+	for (size_t i = 0; i < settings_.sensormeterTargetCount(); i++) {
+		out += "ziel" + String(i + 1) + ".ip=" + settings_.sensormeterTargetIp(i) + "\n";
+		for (uint8_t s = 0; s < SettingsManager::kMaxSensorsPerTarget; s++) {
+			out += "ziel" + String(i + 1) + ".sensor" + String(s + 1) +
+			       ".tempMinC=" + thresholdAttr(settings_.sensormeterTempMinC(i, s)) + "\n";
+			out += "ziel" + String(i + 1) + ".sensor" + String(s + 1) +
+			       ".tempMaxC=" + thresholdAttr(settings_.sensormeterTempMaxC(i, s)) + "\n";
+			out += "ziel" + String(i + 1) + ".sensor" + String(s + 1) +
+			       ".humMinPct=" + thresholdAttr(settings_.sensormeterHumMinPct(i, s)) + "\n";
+			out += "ziel" + String(i + 1) + ".sensor" + String(s + 1) +
+			       ".humMaxPct=" + thresholdAttr(settings_.sensormeterHumMaxPct(i, s)) + "\n";
+		}
+	}
+
+	out += "\n[Ping-Ziele]\n";
+	out += "google.maxLatencyMs=" + pingMsAttr(settings_.googlePingMaxLatencyMs()) + "\n";
+	for (size_t i = 0; i < settings_.pingTargetCount(); i++) {
+		out += "ziel" + String(i + 1) + ".ip=" + settings_.pingTargetIp(i) + "\n";
+		out += "ziel" + String(i + 1) + ".maxLatencyMs=" + pingMsAttr(settings_.pingMaxLatencyMs(i)) + "\n";
+	}
+
+	out += "\n[Netzwerk]\n";
+	out += "ip=" + WiFi.localIP().toString() + "\n";
+	out += "statischeIp=" + String(wlan_.hasStaticIp() ? "ja" : "nein") + "\n";
+
+	out += "\nFirmware=" DEVICE_FIRMWARE_VERSION "\n";
+	return out;
+}
+
 String WebServerManager::buildSettingsPage(bool saved) const {
 	bool isSlide = settings_.mode() == OperatingMode::Slide;
 
@@ -519,6 +597,21 @@ String WebServerManager::buildSettingsPage(bool saved) const {
 	html += "<label>Feuchte-Korrektur (%, ganzzahlig)</label>";
 	html += "<input name=\"dhtHumOffset\" type=\"number\" step=\"1\" value=\"" +
 	        String(settings_.dhtHumOffsetPct()) + "\">";
+	{
+		time_t calTs = settings_.dhtOffsetSetTime();
+		String calText = "Zuletzt kalibriert: ";
+		if (calTs == 0) {
+			calText += "noch nie";
+		} else {
+			struct tm t;
+			localtime_r(&calTs, &t);
+			char buf[20];
+			snprintf(buf, sizeof(buf), "%02d.%02d.%04d %02d:%02d", t.tm_mday, t.tm_mon + 1, t.tm_year + 1900,
+			         t.tm_hour, t.tm_min);
+			calText += buf;
+		}
+		html += "<p class=\"hint\">" + calText + "</p>";
+	}
 	html += "</fieldset>";
 
 	html += "<fieldset><legend>Warnschwellwerte (allgemein)</legend>";
@@ -670,6 +763,12 @@ String WebServerManager::buildSettingsPage(bool saved) const {
 	        "Releases auf GitHub</a></p>";
 	html += "</fieldset>";
 
+	// --- Konfiguration exportieren ---
+	html += "<fieldset><legend>Konfiguration</legend>";
+	html += "<p class=\"hint\">Alle Einstellungen als Textdatei sichern (Backup/Dokumentation).</p>";
+	html += "<a href=\"/settings/export\"><button type=\"button\">Konfiguration herunterladen</button></a>";
+	html += "</fieldset>";
+
 	html += "</div></body></html>";
 	return html;
 }
@@ -815,6 +914,17 @@ void WebServerManager::handleNetworkSave(AsyncWebServerRequest *request) {
 		bool okSn =
 		    request->hasParam("subnet", true) && subnet.fromString(request->getParam("subnet", true)->value());
 		if (okIp && okGw && okSn) {
+			// Kollisions-Check: nur wenn sich die IP gegenueber der aktuell
+			// aktiven Adresse tatsaechlich aendert - erlaubt, dieselbe (eigene)
+			// IP erneut als statisch zu bestaetigen, ohne sich selbst als
+			// "belegt" zu melden.
+			if (ip != WiFi.localIP() && ipRespondsToPing(ip)) {
+				request->send(409, "text/plain",
+				               "IP " + ip.toString() +
+				                   " ist bereits belegt (ein Geraet antwortet auf Ping) - Einstellungen wurden "
+				                   "NICHT uebernommen.");
+				return;
+			}
 			wlan_.saveStaticIp(ip, gateway, subnet);
 		}
 	} else {
@@ -863,6 +973,12 @@ void WebServerManager::begin() {
 	server_.on("/settings", HTTP_GET, [this](AsyncWebServerRequest *request) {
 		if (!checkAuth(request)) return;
 		request->send(200, "text/html", buildSettingsPage(request->hasParam("saved")));
+	});
+	server_.on("/settings/export", HTTP_GET, [this](AsyncWebServerRequest *request) {
+		if (!checkAuth(request)) return;
+		AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", buildConfigExport());
+		response->addHeader("Content-Disposition", "attachment; filename=sensormeter-display-config.txt");
+		request->send(response);
 	});
 
 	server_.on("/save", HTTP_POST, [this](AsyncWebServerRequest *request) { handleSave(request); });

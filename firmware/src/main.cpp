@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <ESPmDNS.h>
 #include <math.h>
 
 #include "DisplayManager.h"
@@ -25,6 +26,30 @@
 #include "WebServerManager.h"
 #include "InfoUI.h"
 #include "AlertEvaluator.h"
+
+namespace {
+// Wandelt den frei waehlbaren Systemnamen in einen gueltigen mDNS-Hostnamen
+// um (nur a-z/0-9/-, keine Umlaute/Leerzeichen) - Systemname kann Leer-
+// zeichen/Umlaute/Grossbuchstaben enthalten, mDNS-Hostnamen duerfen das
+// nicht. Fallback auf einen festen Namen, falls nach dem Filtern nichts
+// uebrig bleibt (z.B. Systemname nur aus Umlauten).
+String sanitizeHostname(const String &name) {
+	String out;
+	for (size_t i = 0; i < name.length(); i++) {
+		char c = name[i];
+		if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+		if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
+			out += c;
+		} else if ((c == ' ' || c == '_') && out.length() > 0 && out[out.length() - 1] != '-') {
+			out += '-';
+		}
+	}
+	while (out.length() > 0 && out[out.length() - 1] == '-') out.remove(out.length() - 1);
+	while (out.length() > 0 && out[0] == '-') out.remove(0, 1);
+	if (out.isEmpty()) out = "sensormeter-display";
+	return out;
+}
+} // namespace
 
 DisplayManager display;
 TouchManager touch;
@@ -87,6 +112,21 @@ void setup() {
 	}
 	Serial.print("WLAN verbunden, IP: ");
 	Serial.println(WiFi.localIP());
+
+	// mDNS: Geraet unter http://<hostname>.local/ erreichbar, ohne die IP
+	// erst am Geraet ablesen zu muessen. Hostname wird bei jedem Boot neu
+	// aus dem aktuellen Systemnamen abgeleitet - eine spaetere Aenderung des
+	// Systemnamens wirkt sich wie bei den Netzwerkeinstellungen erst nach
+	// einem Neustart aus.
+	String mdnsHost = sanitizeHostname(settings.deviceName());
+	if (MDNS.begin(mdnsHost.c_str())) {
+		MDNS.addService("http", "tcp", 80);
+		Serial.print("mDNS gestartet: http://");
+		Serial.print(mdnsHost);
+		Serial.println(".local/");
+	} else {
+		Serial.println("mDNS konnte nicht gestartet werden");
+	}
 
 	TimeSync::begin();
 	sensor.begin();

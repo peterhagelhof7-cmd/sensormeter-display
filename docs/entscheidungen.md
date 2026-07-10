@@ -1232,3 +1232,34 @@ ursprünglichen P4/P5-Eintrag oben). Fix: `StatusBar::forceRedraw()`
 ergänzt, nach `InfoUI::run()`/`settingsUI.run()` aufgerufen, analog zu
 `graph.forceRedraw()`/`pingView.forceRedraw()`. Erneut geflasht, Nutzer hat
 am Geraet bestätigt: "sieht gut aus".
+
+## Sicherheits-Feature: Ping-Check vor statischer IP-Vergabe
+
+Beim Speichern der Netzwerkeinstellungen wird jetzt vor dem Übernehmen
+einer neu gesetzten statischen IP per Ping geprüft, ob im Netz bereits ein
+anderes Gerät unter dieser Adresse antwortet (`ipRespondsToPing()` in
+`WebServerManager.cpp`, nutzt die bereits vorhandene `ESP32Ping`-Library,
+die hier schon für die Ping-Zielüberwachung eingebunden ist). Ist das der
+Fall, wird die neue Konfiguration nicht übernommen (kein Neustart, alte
+Konfiguration bleibt aktiv) und eine Fehlermeldung angezeigt - anders als
+bei den Geschwisterprojekten (dort ein zusammenhängendes Formular mit
+vielen weiteren Feldern) betrifft das hier ausschließlich
+`handleNetworkSave()`, da die Netzwerkeinstellungen bereits ein eigener,
+isolierter Speichern-Endpunkt sind. Check läuft nur, wenn sich die
+eingetragene IP von der aktuell aktiven `WiFi.localIP()` unterscheidet
+(verhindert einen falschen Alarm bei Bestätigung der eigenen Adresse).
+Identisches Grundmuster wie bei Sensormeter und Sensormeter WLAN.
+
+## Werks-Passwort auf "installer" vereinheitlicht
+
+Projektübergreifende Prüfung ergab: Sensormeter und Sensormeter WLAN
+nutzten bereits beide `installer` als Web-Passwort-Default, hier war es
+abweichend `admin` (`SettingsManager.h`/`.cpp`, sowohl Feld-Default als
+auch der Preferences-/Leerstring-Fallback). Auf `installer` angeglichen.
+Wirkt sich nur auf fabrikneu geflashte oder per NVS-Löschung
+zurückgesetzte Geräte aus - ein bereits konfiguriertes Gerät behält sein
+gespeichertes Passwort unverändert bei. Admin-Guide entsprechend ergänzt
+(inkl. Hinweis auf die Umstellung).
+
+Mit `pio run` gebaut und verifiziert (erfolgreich, Flash 79,2 % /
+1.038.413 B, RAM 15,3 % / 50.008 B).
