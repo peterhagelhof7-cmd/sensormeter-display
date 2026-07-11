@@ -11,15 +11,26 @@ constexpr const char *kOidSensor2Temp = "1.3.6.1.4.1.99999.4.2.0";
 constexpr const char *kOidSensor2Hum = "1.3.6.1.4.1.99999.4.3.0";
 } // namespace
 
+void SensormeterManager::begin() {
+	mutex_ = xSemaphoreCreateMutex();
+}
+
 void SensormeterManager::syncTargets(const SettingsManager &settings) {
 	size_t newCount = settings.sensormeterTargetCount();
 	if (newCount > kMaxTargets) newCount = kMaxTargets;
 
+	// IPs vorab lesen (settings haelt dabei nur ihre eigene, separate
+	// Sperre kurz) - vermeidet verschachtelte Sperren.
+	String ips[kMaxTargets];
 	for (size_t i = 0; i < newCount; i++) {
-		String ip = settings.sensormeterTargetIp(i);
-		if (targets_[i].ip != ip) {
+		ips[i] = settings.sensormeterTargetIp(i);
+	}
+
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	for (size_t i = 0; i < newCount; i++) {
+		if (targets_[i].ip != ips[i]) {
 			targets_[i] = Target();
-			targets_[i].ip = ip;
+			targets_[i].ip = ips[i];
 		}
 	}
 	for (size_t i = newCount; i < kMaxTargets; i++) {
@@ -29,65 +40,87 @@ void SensormeterManager::syncTargets(const SettingsManager &settings) {
 	}
 	count_ = newCount;
 	if (nextIndex_ >= count_) nextIndex_ = 0;
+	xSemaphoreGive(mutex_);
 }
 
-void SensormeterManager::resolveIdentity(Target &t, const String &community) {
+void SensormeterManager::resolveIdentity(size_t idx, const String &ip, const String &community) {
 	// Einmalig pro Ziel (nicht auf einzelne Ticks aufgeteilt): passiert nur
 	// beim erstmaligen Hinzufuegen/Aendern eines Ziels, nicht im laufenden
 	// Betrieb - ein etwas laengerer Blockierzeitraum bei einem gerade neu
 	// eingetragenen, noch nicht erreichbaren Ziel ist dafuer akzeptabel
-	// (Nutzer sitzt ohnehin gerade in den Einstellungen).
+	// (Nutzer sitzt ohnehin gerade in den Einstellungen). Alle SNMP-
+	// Rundreisen (blockierend, mehrere Sekunden bei Nichterreichbarkeit)
+	// laufen bewusst AUSSERHALB der Sperre - nur lokale Variablen werden
+	// hier beschrieben, siehe Klassenkommentar.
 	String name, type;
-	bool okName = snmp_.getString(t.ip, community, kOidSystemName, name);
-	bool okType = snmp_.getString(t.ip, community, kOidSystemType, type);
+	bool okName = snmp_.getString(ip, community, kOidSystemName, name);
+	bool okType = snmp_.getString(ip, community, kOidSystemType, type);
 	if (!okName || !okType) {
 		return; // naechster Round-Robin-Durchlauf versucht es erneut
 	}
-	t.systemName = name;
-	t.isPro = (type == "Sensormeter PRO");
+	bool isPro = (type == "Sensormeter PRO");
 
 	String s1;
-	bool okS1 = snmp_.getString(t.ip, community, kOidSensor1Name, s1);
-	if (!okS1) {
+	if (!snmp_.getString(ip, community, kOidSensor1Name, s1)) {
 		return;
 	}
-	t.sensorName[0] = s1;
 
-	if (t.isPro) {
-		String s2;
-		if (!snmp_.getString(t.ip, community, kOidSensor2Name, s2)) {
-			return;
-		}
-		t.sensorName[1] = s2;
+	String s2;
+	if (isPro && !snmp_.getString(ip, community, kOidSensor2Name, s2)) {
+		return;
 	}
-	t.identityResolved = true;
+
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	// idx koennte waehrend der (mehrere Sekunden dauernden) SNMP-Rundreise
+	// durch eine zwischenzeitliche Aenderung der Zielliste (syncTargets())
+	// ein anderes Ziel bekommen haben - vor dem Uebernehmen die IP erneut
+	// pruefen, sonst wuerde das Ergebnis dem falschen (neuen) Ziel
+	// zugeschrieben.
+	if (idx < kMaxTargets && targets_[idx].ip == ip) {
+		targets_[idx].systemName = name;
+		targets_[idx].isPro = isPro;
+		targets_[idx].sensorName[0] = s1;
+		if (isPro) targets_[idx].sensorName[1] = s2;
+		targets_[idx].identityResolved = true;
+	}
+	xSemaphoreGive(mutex_);
 }
 
-void SensormeterManager::refreshReadings(Target &t, const String &community) {
+void SensormeterManager::refreshReadings(size_t idx, const String &ip, bool isPro, const String &community) {
 	int32_t temp10 = 0, hum10 = 0;
-	bool okTemp = snmp_.getInteger(t.ip, community, kOidSensor1Temp, temp10);
-	bool okHum = okTemp && snmp_.getInteger(t.ip, community, kOidSensor1Hum, hum10);
-	if (okTemp && okHum) {
-		t.tempC[0] = temp10 / 10.0f;
-		t.humidityPct[0] = hum10 / 10.0f;
-		t.valid[0] = true;
+	bool okTemp = snmp_.getInteger(ip, community, kOidSensor1Temp, temp10);
+	bool okHum = okTemp && snmp_.getInteger(ip, community, kOidSensor1Hum, hum10);
+
+	int32_t temp2_10 = 0, hum2_10 = 0;
+	bool okTemp2 = false, okHum2 = false;
+	if (isPro) {
+		okTemp2 = snmp_.getInteger(ip, community, kOidSensor2Temp, temp2_10);
+		okHum2 = okTemp2 && snmp_.getInteger(ip, community, kOidSensor2Hum, hum2_10);
 	}
 
-	if (t.isPro) {
-		int32_t temp2_10 = 0, hum2_10 = 0;
-		bool okTemp2 = snmp_.getInteger(t.ip, community, kOidSensor2Temp, temp2_10);
-		bool okHum2 = okTemp2 && snmp_.getInteger(t.ip, community, kOidSensor2Hum, hum2_10);
-		if (okTemp2 && okHum2) {
-			t.tempC[1] = temp2_10 / 10.0f;
-			t.humidityPct[1] = hum2_10 / 10.0f;
-			t.valid[1] = true;
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	if (idx < kMaxTargets && targets_[idx].ip == ip) {
+		if (okTemp && okHum) {
+			targets_[idx].tempC[0] = temp10 / 10.0f;
+			targets_[idx].humidityPct[0] = hum10 / 10.0f;
+			targets_[idx].valid[0] = true;
+		}
+		if (isPro && okTemp2 && okHum2) {
+			targets_[idx].tempC[1] = temp2_10 / 10.0f;
+			targets_[idx].humidityPct[1] = hum2_10 / 10.0f;
+			targets_[idx].valid[1] = true;
 		}
 	}
+	xSemaphoreGive(mutex_);
 }
 
 bool SensormeterManager::update(const SettingsManager &settings) {
 	syncTargets(settings);
-	if (count_ == 0) {
+
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	size_t count = count_;
+	xSemaphoreGive(mutex_);
+	if (count == 0) {
 		return false;
 	}
 
@@ -98,40 +131,75 @@ bool SensormeterManager::update(const SettingsManager &settings) {
 	lastCheckMs_ = now;
 
 	String community = settings.sensormeterCommunity();
-	Target &t = targets_[nextIndex_];
-	if (!t.identityResolved) {
-		resolveIdentity(t, community);
-	} else {
-		refreshReadings(t, community);
-	}
+
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	size_t idx = nextIndex_;
+	String ip = targets_[idx].ip;
+	bool alreadyResolved = targets_[idx].identityResolved;
+	bool isPro = targets_[idx].isPro;
 	nextIndex_ = (nextIndex_ + 1) % count_;
+	xSemaphoreGive(mutex_);
+
+	if (!alreadyResolved) {
+		resolveIdentity(idx, ip, community);
+	} else {
+		refreshReadings(idx, ip, isPro, community);
+	}
 	return true;
 }
 
+size_t SensormeterManager::targetCount() const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	size_t v = count_;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
 bool SensormeterManager::isResolved(size_t i) const {
-	return (i < count_) && targets_[i].identityResolved;
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	bool v = (i < count_) && targets_[i].identityResolved;
+	xSemaphoreGive(mutex_);
+	return v;
 }
 
 bool SensormeterManager::isPro(size_t i) const {
-	return (i < count_) && targets_[i].isPro;
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	bool v = (i < count_) && targets_[i].isPro;
+	xSemaphoreGive(mutex_);
+	return v;
 }
 
 String SensormeterManager::systemName(size_t i) const {
-	return (i < count_) ? targets_[i].systemName : String();
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	String v = (i < count_) ? targets_[i].systemName : String();
+	xSemaphoreGive(mutex_);
+	return v;
 }
 
 String SensormeterManager::sensorName(size_t i, uint8_t sensorIndex) const {
-	return (i < count_ && sensorIndex < 2) ? targets_[i].sensorName[sensorIndex] : String();
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	String v = (i < count_ && sensorIndex < 2) ? targets_[i].sensorName[sensorIndex] : String();
+	xSemaphoreGive(mutex_);
+	return v;
 }
 
 bool SensormeterManager::sensorValid(size_t i, uint8_t sensorIndex) const {
-	return (i < count_ && sensorIndex < 2) && targets_[i].valid[sensorIndex];
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	bool v = (i < count_ && sensorIndex < 2) && targets_[i].valid[sensorIndex];
+	xSemaphoreGive(mutex_);
+	return v;
 }
 
 float SensormeterManager::sensorTempC(size_t i, uint8_t sensorIndex) const {
-	return (i < count_ && sensorIndex < 2) ? targets_[i].tempC[sensorIndex] : 0.0f;
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	float v = (i < count_ && sensorIndex < 2) ? targets_[i].tempC[sensorIndex] : 0.0f;
+	xSemaphoreGive(mutex_);
+	return v;
 }
 
 float SensormeterManager::sensorHumidityPct(size_t i, uint8_t sensorIndex) const {
-	return (i < count_ && sensorIndex < 2) ? targets_[i].humidityPct[sensorIndex] : 0.0f;
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	float v = (i < count_ && sensorIndex < 2) ? targets_[i].humidityPct[sensorIndex] : 0.0f;
+	xSemaphoreGive(mutex_);
+	return v;
 }

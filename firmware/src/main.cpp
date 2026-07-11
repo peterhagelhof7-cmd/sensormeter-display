@@ -132,6 +132,7 @@ void setup() {
 	sensor.begin();
 	graph.begin();
 	pingManager.begin();
+	sensormeterManager.begin();
 	webServer.begin();
 }
 

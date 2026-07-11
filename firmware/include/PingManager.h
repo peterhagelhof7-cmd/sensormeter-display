@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <freertos/semphr.h>
 
 #include "SettingsManager.h"
 
@@ -10,6 +11,14 @@
 // blockieren, wird pro update()-Aufruf hoechstens EIN Google-Ping UND EIN
 // Ziel-Ping (round-robin) ausgefuehrt, nicht alle auf einmal - siehe
 // docs/entscheidungen.md.
+//
+// Mutex-geschuetzt wie SettingsManager: update() laeuft im Hauptloop, die
+// Getter werden zusaetzlich vom asynchronen Webserver-Task gelesen. Anders
+// als bei SettingsManager duerfen die blockierenden Ping()-Aufrufe (bis zu
+// ~1s pro Ziel) NICHT innerhalb der Sperre liegen, sonst wuerde der
+// Webserver-Task bei jedem Dashboard-Aufruf bis zu 1-2s warten - pingGoogle()/
+// pingNextTarget() rechnen daher ausserhalb der Sperre und uebernehmen das
+// Ergebnis nur kurz gesperrt (siehe docs/entscheidungen.md).
 class PingManager {
 public:
 	static constexpr uint32_t kCheckIntervalMs = 2000;
@@ -20,19 +29,19 @@ public:
 	// Liefert true, wenn in diesem Aufruf tatsaechlich gepingt wurde.
 	bool update(const SettingsManager &settings);
 
-	bool hasGoogleReading() const { return recentCount > 0; }
+	bool hasGoogleReading() const;
 	float googleAverageLatencyMs() const;
 	bool isFailingOver1Min() const;
 
-	size_t targetCount() const { return numTargets; }
-	String targetIp(size_t i) const { return (i < numTargets) ? targets[i].ip : String(); }
-	bool targetOk(size_t i) const { return (i < numTargets) ? targets[i].ok : false; }
-	bool targetChecked(size_t i) const { return (i < numTargets) ? targets[i].checked : false; }
+	size_t targetCount() const;
+	String targetIp(size_t i) const;
+	bool targetOk(size_t i) const;
+	bool targetChecked(size_t i) const;
 	// Letzte erfolgreich gemessene Latenz (ms). Bleibt bei einem
 	// fehlgeschlagenen Ping auf dem zuletzt erfolgreichen Wert stehen -
 	// targetHasLatency() unterscheidet "noch nie erfolgreich" von "0ms".
-	float targetLatencyMs(size_t i) const { return (i < numTargets) ? targets[i].lastLatencyMs : 0.0f; }
-	bool targetHasLatency(size_t i) const { return (i < numTargets) ? targets[i].hasLatency : false; }
+	float targetLatencyMs(size_t i) const;
+	bool targetHasLatency(size_t i) const;
 
 private:
 	void pingGoogle();
@@ -46,7 +55,9 @@ private:
 		bool hasLatency = false;
 	};
 
-	uint32_t lastCheckMs = 0;
+	SemaphoreHandle_t mutex_ = nullptr;
+
+	uint32_t lastCheckMs = 0;  // nur vom Hauptloop-Task gelesen/geschrieben, keine Sperre noetig
 	float recentLatencies[5] = {0, 0, 0, 0, 0};
 	size_t recentCount = 0;
 	size_t recentWriteIndex = 0;

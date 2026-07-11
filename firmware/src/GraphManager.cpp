@@ -22,11 +22,12 @@ void drawDashedHLine(TFT_eSPI &tft, int16_t x0, int16_t x1, int16_t y, uint16_t 
 }
 
 void GraphManager::begin() {
+	mutex_ = xSemaphoreCreateMutex();
 	if (!LittleFS.begin(true)) {
 		Serial.println("LittleFS-Mount fehlgeschlagen (auch nach Formatierungsversuch)");
 		return;
 	}
-	load();
+	load(); // unlocked: laeuft in begin(), bevor ein zweiter Task existieren kann
 }
 
 void GraphManager::load() {
@@ -72,6 +73,7 @@ void GraphManager::save() const {
 }
 
 void GraphManager::appendEntry(time_t ts, int16_t tempC, int16_t humidityPct) {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
 	if (count < kMaxEntries) {
 		entries[count++] = {ts, tempC, humidityPct};
 	} else {
@@ -81,7 +83,36 @@ void GraphManager::appendEntry(time_t ts, int16_t tempC, int16_t humidityPct) {
 		entries[kMaxEntries - 1] = {ts, tempC, humidityPct};
 	}
 	lastRecordTs = ts;
-	save();
+	save(); // haelt selbst keine eigene Sperre, siehe Kommentar dort
+	xSemaphoreGive(mutex_);
+}
+
+size_t GraphManager::entryCount() const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	size_t v = count;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+time_t GraphManager::entryTs(size_t i) const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	time_t v = (i < count) ? entries[i].ts : 0;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+int16_t GraphManager::entryTempC(size_t i) const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	int16_t v = (i < count) ? entries[i].tempC : 0;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+int16_t GraphManager::entryHumidityPct(size_t i) const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	int16_t v = (i < count) ? entries[i].humidityPct : 0;
+	xSemaphoreGive(mutex_);
+	return v;
 }
 
 void GraphManager::maybeRecord(float tempC, float humidityPct) {

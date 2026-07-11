@@ -66,6 +66,14 @@ bool ipRespondsToPing(const IPAddress &ip) {
 	return Ping.ping(ip, 1);
 }
 
+// Wartezeit fuer den DHCP-Lease-Test in handleNetworkSave() - laenger als
+// der 1s-Ping-Timeout, da eine vollstaendige DHCP-Verhandlung
+// (Discover/Offer/Request/Ack) mehr Umlaeufe braucht. Noch nicht auf echter
+// Hardware verifiziert, ob das den Async-Webserver-Handler zu lange
+// blockiert - bei Auffaelligkeiten (Reboot waehrend des Tests) hier zuerst
+// nachsehen.
+const unsigned long kDhcpTestTimeoutMs = 8000;
+
 String thresholdAttr(int16_t v) {
 	return v == SettingsManager::kThresholdDisabled ? String("") : String(v);
 }
@@ -750,6 +758,10 @@ String WebServerManager::buildSettingsPage(bool saved) const {
 		html += "<label>Subnetzmaske</label><input name=\"subnet\" value=\"" +
 		        (staticIp ? subnet.toString() : String("255.255.255.0")) + "\">";
 		html += "<button type=\"submit\">Speichern (Geraet startet neu)</button>";
+		html += "<p class=\"hint\">Prueft vor der Uebernahme, ob die Verbindung tatsaechlich moeglich ist - bei "
+		        "\"Automatisch (DHCP)\" durch einen echten Verbindungsversuch (bis zu 8s, nur bei erhaltener "
+		        "Lease wird uebernommen), bei \"Statisch\" per Ping (Adresse darf nicht bereits belegt sein). "
+		        "Erst bei Erfolg werden die Netzwerkfelder gespeichert und das Geraet neu gestartet.</p>";
 		html += "</form></fieldset>";
 	}
 
@@ -928,6 +940,38 @@ void WebServerManager::handleNetworkSave(AsyncWebServerRequest *request) {
 			wlan_.saveStaticIp(ip, gateway, subnet);
 		}
 	} else {
+		// Live-Test auf der bestehenden Verbindung, bevor DHCP tatsaechlich
+		// uebernommen wird: WiFi.config() mit Nulladressen erzwingt einen
+		// neuen DHCP-Lauf, OHNE die WLAN-Assoziation zu trennen (reiner
+		// L3-Vorgang). Erst bei tatsaechlich erhaltener Lease (IP != 0.0.0.0)
+		// gilt der Test als erfolgreich - andernfalls bleibt die zuletzt
+		// gespeicherte (ggf. statische) Konfiguration unangetastet und es
+		// wird KEIN Neustart ausgeloest.
+		IPAddress zero(0, 0, 0, 0);
+		WiFi.config(zero, zero, zero);
+		unsigned long start = millis();
+		bool gotLease = false;
+		while (millis() - start < kDhcpTestTimeoutMs) {
+			if (WiFi.localIP() != zero) {
+				gotLease = true;
+				break;
+			}
+			delay(100);
+		}
+		if (!gotLease) {
+			// Vorherige Live-Konfiguration wiederherstellen, falls zuvor eine
+			// statische IP aktiv war, damit die laufende Verbindung (inkl.
+			// dieser HTTP-Antwort) nicht im DHCP-Test-Zwischenzustand haengen
+			// bleibt.
+			IPAddress prevIp, prevGw, prevSn;
+			if (wlan_.loadStaticIp(prevIp, prevGw, prevSn)) {
+				WiFi.config(prevIp, prevGw, prevSn);
+			}
+			request->send(409, "text/plain",
+			               "Kein DHCP-Server im Netz gefunden (keine Lease erhalten) - Einstellungen NICHT "
+			               "uebernommen.");
+			return;
+		}
 		wlan_.clearStaticIp();
 	}
 

@@ -1,6 +1,7 @@
 #include "SensorManager.h"
 
 void SensorManager::begin() {
+	mutex_ = xSemaphoreCreateMutex();
 	dht.begin();
 }
 
@@ -25,9 +26,14 @@ bool SensorManager::update(const SettingsManager &settings) {
 	}
 	lastPollMs = now;
 
+	// dht.readTemperature()/readHumidity() sind kurze, aber blockierende
+	// 1-Wire-Zugriffe (kein Netzwerk) - im Unterschied zu PingManager/
+	// SensormeterManager unproblematisch, den ganzen update()-Aufruf zu
+	// sperren (siehe docs/entscheidungen.md).
 	float t = dht.readTemperature();
 	float h = dht.readHumidity();
 
+	xSemaphoreTake(mutex_, portMAX_DELAY);
 	// Plausibilitaetspruefung auf dem ROHEN Messwert (nicht dem
 	// korrigierten) - die Korrektur ist eine kleine Kalibrierkonstante,
 	// keine Fehlerkompensation, und soll den Garbage-Filter nicht
@@ -42,5 +48,34 @@ bool SensorManager::update(const SettingsManager &settings) {
 	}
 	// bei Implausibilitaet: letzter gueltiger Wert bleibt bestehen
 	// (valid wird nur beim allerersten Fehlversuch nicht auf true gesetzt)
+	xSemaphoreGive(mutex_);
 	return true;
+}
+
+bool SensorManager::hasValidReading() const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	bool v = valid;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+float SensorManager::temperatureC() const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	float v = lastTempC;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+float SensorManager::humidityPercent() const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	float v = lastHumidityPct;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+time_t SensorManager::lastReadTime() const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	time_t v = lastReadTs;
+	xSemaphoreGive(mutex_);
+	return v;
 }

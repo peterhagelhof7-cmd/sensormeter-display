@@ -1263,3 +1263,81 @@ gespeichertes Passwort unverändert bei. Admin-Guide entsprechend ergänzt
 
 Mit `pio run` gebaut und verifiziert (erfolgreich, Flash 79,2 % /
 1.038.413 B, RAM 15,3 % / 50.008 B).
+
+## DHCP-Lease-Test vor Übernahme der Netzwerkeinstellungen
+
+Analog zum bereits vorhandenen Ping-Check bei statischer IP (siehe oben)
+jetzt auch für den DHCP-Zweig in `handleNetworkSave()`: `WiFi.config(0,0,0)`
+erzwingt auf der bestehenden Verbindung einen neuen DHCP-Lauf, OHNE die
+WLAN-Assoziation zu trennen (reiner L3-Vorgang) - erst bei tatsächlich
+erhaltener Lease (`WiFi.localIP() != 0.0.0.0`, bis zu 8s Wartezeit) gilt
+der Test als erfolgreich. Schlägt er fehl, wird die zuvor gespeicherte
+(ggf. statische) Konfiguration auf der laufenden Verbindung
+wiederhergestellt, NICHTS gespeichert und KEIN Neustart ausgelöst -
+identisches Verhaltensmuster wie bei Sensormeter und Sensormeter WLAN
+(dort als eigener "IP-Einstellungen übernehmen"-Button neben dem
+allgemeinen Speichern-Button; hier direkt in den bereits bestehenden,
+isolierten `/network/save`-Endpunkt integriert, da Sensormeter Display
+diese Trennung schon vorher hatte - kein neuer Button nötig).
+
+Wartezeit-Konstante `kDhcpTestTimeoutMs = 8000` - noch nicht auf echter
+Hardware verifiziert, ob das den Async-Webserver-Task spürbar blockiert
+(gleicher offener Punkt wie bei den Schwesterprojekten). Admin-Guide
+(Abschnitt 7.4, neuer Warnhinweis + Troubleshooting-Zeile) und
+Einstellungsseite (neuer Hinweistext unter dem Speichern-Button)
+entsprechend ergänzt.
+
+## Admin-Guide um das Live-Status-Dashboard ergänzt (nachgezogen)
+
+Der öffentliche, passwortlose Dashboard-Screen auf `/` (Auto-Refresh 30s,
+zeigt DHT11/WLAN/Sensormeter-Ziele/Ping-Ziele + Warnleiste) war bereits
+seit v0.9.0-rc2 Teil der Firmware, aber nie im Admin-Guide dokumentiert -
+beim Wiederherstellen der HTML-Quelle für diese Runde aufgefallen und als
+neuer Abschnitt 7.4 nachgezogen (nur diese eine Lücke geschlossen, keine
+darüber hinausgehende Vollständigkeitsprüfung der übrigen v0.9.0-rc2-
+Änderungen).
+
+## Mutex-Schutz auf SensorManager/PingManager/SensormeterManager/GraphManager ausgeweitet
+
+Bereits als TODO vermerkt (siehe frühere Notiz zu diesem Projekt): seit
+dem Live-Status-Dashboard (v0.9.0-rc2) liest der asynchrone Webserver-Task
+`SensorManager`, `PingManager`, `SensormeterManager` und `GraphManager`
+gleichzeitig zum Hauptloop, der sie schreibt - keine der vier hatte bisher
+eine Sperre (anders als `SettingsManager`, das dieses Muster von Anfang an
+nutzt). Risiko konzentriert auf `String`-Felder (z. B.
+`PingManager::targetIp()`, `SensormeterManager::systemName()`/
+`sensorName()`) - `Arduino::String` ist nicht thread-sicher, ein
+gleichzeitiger Lese-/Schreibzugriff auf denselben internen Puffer kann zu
+Speicherfehlern/Abstürzen führen.
+
+**Umsetzung** (identisches Muster wie `SettingsManager`: `SemaphoreHandle_t
+mutex_`, jeder öffentliche Getter/Setter nimmt/gibt die Sperre, private
+`save()`-artige Helfer setzen voraus, dass der Aufrufer sie bereits
+hält):
+- `SensorManager`: unproblematisch komplett gesperrt - `dht.readTemperature()`/
+  `readHumidity()` sind kurze 1-Wire-Zugriffe, kein Netzwerk.
+- `GraphManager`: nur die vier öffentlichen `entry*()`-Getter und
+  `appendEntry()` gesperrt - die private Zeichenlogik
+  (`drawFullScreen()`/`drawGraph()`) läuft ausschließlich im selben Task
+  wie die Schreibzugriffe und braucht daher keine Sperre.
+- `PingManager`/`SensormeterManager`: die eigentliche, blockierende
+  Netzwerk-I/O (`Ping.ping()` bis zu ~1s, SNMP-Rundreisen bis zu mehrere
+  Sekunden bei Nichterreichbarkeit) läuft bewusst AUSSERHALB der Sperre -
+  ein naives "ganzes update() sperren" hätte den Webserver-Task bei jedem
+  Dashboard-Aufruf um bis zu mehrere Sekunden blockiert. Stattdessen:
+  Ergebnis in lokale Variablen schreiben, dann nur das kurze Übernehmen in
+  die Member-Felder sperren. Bei `SensormeterManager::resolveIdentity()`/
+  `refreshReadings()` zusätzlich eine IP-Übereinstimmungsprüfung beim
+  Übernehmen (Absicherung gegen den seltenen Fall, dass sich die Zielliste
+  während der mehrere Sekunden dauernden SNMP-Rundreise über die
+  Einstellungen geändert hat).
+- `SensormeterManager` brauchte dafür erstmals eine eigene `begin()`-Methode
+  (Mutex-Erzeugung) - in `main.cpp` ergänzt.
+
+Mit `pio run` gebaut und verifiziert (erfolgreich, Flash 79,5 % /
+1.041.757 B, RAM 15,3 % / 50.024 B). Noch NICHT auf echter Hardware
+geflasht/getestet in dieser Runde - insbesondere die Nebenläufigkeit
+selbst (Dashboard-Aufruf waehrend eines laufenden Ping/SNMP-Zyklus) ist
+ohne ein zweites, aktiv abfragendes Geraet schwer gezielt zu provozieren.
+Firmware-Version auf `0.9.0-rc3` angehoben (`config.h`/`config.h.example`,
+Admin-Guide, One-Pager).

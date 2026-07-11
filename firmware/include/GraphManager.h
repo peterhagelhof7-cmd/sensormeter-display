@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <freertos/semphr.h>
 #include <time.h>
 
 #include "DisplayManager.h"
@@ -9,6 +10,13 @@
 // Feuchte-Verlauf (untere zwei Drittel), siehe lastenheft.txt Abschnitt 7.1.
 // Verlauf als Ringpuffer (24 Eintraege a 30 Minuten = 12h) in
 // history.csv auf LittleFS, wird beim Boot geladen.
+//
+// Mutex-geschuetzt wie SettingsManager, aber NUR fuer die vier oeffentlichen
+// entry*()-Getter (siehe dortigen Kommentar) - die werden vom asynchronen
+// Webserver-Task gelesen (Dashboard-Graph). appendEntry()/drawFullScreen()/
+// drawGraph() sowie der Redraw-Cache (everDrawn etc.) laufen ausschliesslich
+// im Hauptloop-/UI-Task und brauchen daher keine Sperre untereinander -
+// siehe docs/entscheidungen.md.
 class GraphManager {
 public:
 	static constexpr size_t kMaxEntries = 24;
@@ -35,10 +43,10 @@ public:
 	// Lesender Zugriff auf den Ringpuffer fuer das Webserver-Dashboard
 	// (eigener SVG-Graph dort, siehe WebServerManager) - liefert 0/leere
 	// Werte bei Index ausserhalb von [0, entryCount()).
-	size_t entryCount() const { return count; }
-	time_t entryTs(size_t i) const { return (i < count) ? entries[i].ts : 0; }
-	int16_t entryTempC(size_t i) const { return (i < count) ? entries[i].tempC : 0; }
-	int16_t entryHumidityPct(size_t i) const { return (i < count) ? entries[i].humidityPct : 0; }
+	size_t entryCount() const;
+	time_t entryTs(size_t i) const;
+	int16_t entryTempC(size_t i) const;
+	int16_t entryHumidityPct(size_t i) const;
 
 private:
 	struct Entry {
@@ -53,6 +61,7 @@ private:
 	void drawGraph(DisplayManager &display, int16_t x, int16_t y, int16_t w, int16_t h, int16_t tempMinC,
 	                int16_t tempMaxC, int16_t humMinPct, int16_t humMaxPct) const;
 
+	SemaphoreHandle_t mutex_ = nullptr;
 	Entry entries[kMaxEntries];
 	size_t count = 0;
 	time_t lastRecordTs = 0;

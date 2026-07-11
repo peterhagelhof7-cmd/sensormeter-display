@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <freertos/semphr.h>
 
 #include "SettingsManager.h"
 #include "SnmpClient.h"
@@ -16,16 +17,25 @@
 // Name), danach laufend nur noch die Messwerte aktualisiert. Ein Ziel vom
 // Typ "Sensormeter PRO" liefert zwei Sensor-Slides (Sensor 1 + 2), alle
 // anderen genau einen - siehe SensormeterView, die diese Slides anzeigt.
+//
+// Mutex-geschuetzt wie SettingsManager/PingManager: update() laeuft im
+// Hauptloop, die Getter werden zusaetzlich vom asynchronen Webserver-Task
+// gelesen. Wie bei PingManager liegen die blockierenden SNMP-Rundreisen
+// (resolveIdentity()/refreshReadings(), mehrere Sekunden bei einem nicht
+// erreichbaren Ziel) AUSSERHALB der Sperre - nur das Uebernehmen des
+// Ergebnisses in targets_ ist kurz gesperrt (siehe docs/entscheidungen.md).
 class SensormeterManager {
 public:
 	static constexpr size_t kMaxTargets = SettingsManager::kMaxSensormeterTargets;
 	static constexpr uint32_t kCheckIntervalMs = 4000;
 
+	void begin();
+
 	// Liefert true, wenn in diesem Aufruf tatsaechlich ein SNMP-Vorgang
 	// stattfand (fuer die Aufrufer-seitige Redraw-Entscheidung).
 	bool update(const SettingsManager &settings);
 
-	size_t targetCount() const { return count_; }
+	size_t targetCount() const;
 	bool isResolved(size_t i) const;
 	bool isPro(size_t i) const;
 	String systemName(size_t i) const;
@@ -49,14 +59,19 @@ private:
 
 	// Gleicht targets_ mit den in den Einstellungen konfigurierten IPs ab -
 	// bei Aenderung (neues/entferntes/geaendertes Ziel) wird der betroffene
-	// Slot zurueckgesetzt, damit seine Identitaet neu aufgeloest wird.
+	// Slot zurueckgesetzt, damit seine Identitaet neu aufgeloest wird. Keine
+	// Netzwerk-I/O, daher komplett gesperrt unproblematisch.
 	void syncTargets(const SettingsManager &settings);
-	void resolveIdentity(Target &t, const String &community);
-	void refreshReadings(Target &t, const String &community);
+	// idx statt Referenz: der eigentliche SNMP-Verkehr (in .cpp) laeuft
+	// AUSSERHALB der Sperre, targets_[idx] wird erst beim Uebernehmen des
+	// Ergebnisses kurz gesperrt angefasst.
+	void resolveIdentity(size_t idx, const String &ip, const String &community);
+	void refreshReadings(size_t idx, const String &ip, bool isPro, const String &community);
 
+	SemaphoreHandle_t mutex_ = nullptr;
 	Target targets_[kMaxTargets];
 	size_t count_ = 0;
 	size_t nextIndex_ = 0;
-	uint32_t lastCheckMs_ = 0;
+	uint32_t lastCheckMs_ = 0;  // nur vom Hauptloop-Task gelesen/geschrieben, keine Sperre noetig
 	SnmpClient snmp_;
 };
