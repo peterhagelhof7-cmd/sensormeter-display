@@ -1341,3 +1341,91 @@ selbst (Dashboard-Aufruf waehrend eines laufenden Ping/SNMP-Zyklus) ist
 ohne ein zweites, aktiv abfragendes Geraet schwer gezielt zu provozieren.
 Firmware-Version auf `0.9.0-rc3` angehoben (`config.h`/`config.h.example`,
 Admin-Guide, One-Pager).
+
+## Anbieter-Branding (Weisslabel) umgesetzt - erstes Farb-Display der Familie
+
+Letztes der vier Sensormeter-Projekte, das das bei Sensormeter WLAN
+eingeführte Branding-Feature (siehe dessen `docs/entscheidungen.md`)
+bekommt - hier aber eine echte Neuentwicklung statt einer reinen Portierung,
+da dieses Board als einziges ein Farb-TFT (ST7789P3) statt eines
+monochromen OLEDs hat. Kein `ConfigManager`/`config.xml` wie bei den
+Geschwistern, sondern das projekteigene `SettingsManager`/NVS-Schema.
+
+- **Vendor-Name**: neues Feld in `SettingsManager` (NVS-Key `brandName`),
+  identisches Muster zu `deviceName_`/`webPassword_` - anders als
+  `deviceName()` OHNE Default-Fallback (leer = Feature inaktiv).
+- **Logo NICHT in NVS**: ein 16.384-Byte-Blob waere fuer einen einzelnen
+  NVS-Eintrag ungeeignet gross - stattdessen wie bei den Geschwistern eine
+  eigene Datei auf LittleFS (`/branding-logo.bin`), verwaltet durch die
+  neue Klasse `BrandingManager` (eigener Mutex, Tmp-Datei-plus-Umbenennen-
+  Upload wie `ConfigManager::save()` bzw. die OLED-Geschwister, RAM-Cache
+  fuer `hasLogo()` statt wiederholtem `LittleFS.exists()` - letzteres von
+  Anfang an vermieden, siehe der bei Sensormeter WLAN gefundene Logquirk).
+- **Neue Datenquelle statt eigenem Sonderfall**: `DataSource::Branding`
+  als sechster Wert in `kAvailableDataSources` - bewusst IMMER Teil der
+  Slide-Rotation/Static-Auswahl, auch unkonfiguriert (zeigt dann einen
+  Platzhalter "Kein Branding konfiguriert", exakt wie
+  `PingView::drawTargetList()` bei leerer Zielliste) - ANDERS als bei den
+  OLED-Geschwistern (dort dynamisches Ein-/Ausblenden), weil dieses Projekt
+  ohnehin nie nach Konfigurationsstand filtert (Sensormeter-/Ping-Ziele
+  bleiben ebenfalls immer in der Rotation).
+- **Logo-Format 128x64** (nicht z. B. 200x100 wie zunaechst entworfen):
+  bewusst dieselbe Aufloesung wie die drei OLED-Geschwisterprojekte
+  gewaehlt, nur mit RGB565 (2 Byte/Pixel) statt 1bpp - damit
+  `scripts/convert-logo.ps1` fuer alle vier Projekte dieselbe Zielgroesse
+  nutzt und nur die Farbtiefe je Display umschaltet. Ergebnis: 16.384 Byte
+  Rohdaten statt der zunaechst veranschlagten 40.000 Byte.
+- **Web-Auslieferung als 24-Bit-BMP** (nicht 16-Bit): eine korrekte
+  16-Bit-BMP braucht eine BITFIELDS-Farbmaskenerweiterung (mehr
+  Fehlerpotential, weniger portabel) - der zusaetzliche Speicher fuer
+  24 Bit faellt bei dieser Logo-Groesse nicht ins Gewicht.
+- **Echter Bug gefunden und behoben, bevor er ausgeliefert wurde**: die
+  erste Fassung von `handleBrandingLogoBmp()` allozierte den BMP-Puffer
+  auf dem Heap und gab ihn UNMITTELBAR nach `request->send()` wieder frei
+  - ein Use-after-free, da ESPAsyncWebServers `beginResponse(code, type,
+  const uint8_t*, len)`-Ueberladung (`AsyncProgmemResponse`) nur den
+  rohen Pointer haelt und asynchron ERST NACH Rueckkehr aus dieser
+  Funktion tatsaechlich daraus liest (siehe `WebResponseImpl.h` in der
+  Bibliothek - `_content` ist dort ein roher `const uint8_t*`, keine
+  Kopie). Behoben durch Umstellung auf statische Puffer (analog zum
+  kleineren statischen BMP-Puffer bei den OLED-Geschwistern) - dabei
+  gleich die Logo-Groesse von 200x100 auf 128x64 reduziert (siehe oben),
+  um die beiden nun permanent reservierten Puffer (Roh-Logo 16.384 Byte +
+  BMP 24.630 Byte, zusammen ~41 KB) in einem vertretbaren Rahmen zu
+  halten.
+- **Farbkanal-Vorbehalt, bewusst NICHT vorab kompensiert**: `platformio.ini`
+  setzt `TFT_RGB_ORDER=0` (BGR) fuer dieses Panel, und selbst unter dieser
+  gewaehlten Einstellung mussten einzelne benannte Farben empirisch
+  kompensiert werden (`TFT_YELLOW` statt `TFT_RED`, siehe weiter oben in
+  diesem Protokoll) - der MADCTL-Farbkanaltausch verhaelt sich auf diesem
+  Panel/Klon also nicht rein spezifikationsgemaess. Logos werden daher
+  bewusst in Standard-RGB565 gepackt (wie `TFT_eSPI::color565()` es auch
+  tut) statt blind zu kompensieren, um nicht falsch herum zu tauschen.
+  `scripts/convert-logo.ps1 -Display display -SwapRedBlue` als
+  Escape-Hatch, falls sich auf echter Hardware zeigt, dass doch getauscht
+  werden muss.
+- **Neue Web-UI-Elemente**: Branding-Banner (Logo + Name) unterhalb des
+  Haupt-Banners auf Dashboard UND Einstellungsseite (nur ausgegeben, wenn
+  etwas konfiguriert ist), eigenes Fieldset "Anbieter-Branding"
+  (Vendor-Name im Haupt-`/save`-Formular) sowie "Branding-Logo" (eigenes
+  Multipart-Formular, analog Firmware-Update) mit Lösch-Button.
+
+**Unabhängig verifiziert, nicht auf echter Hardware**: sowohl das
+PC-seitige `convert-logo.ps1`-Packen als auch die Firmware-seitige
+`buildLogoBmp()`-Logik wurden 1:1 nach Python portiert, gegen dieselbe
+128x64-Testdatei (Kreis/Rechteck-Testmuster) laufen gelassen und mit
+Pillow geöffnet - beide erzeugen pixelgenau dasselbe Bild wie die
+Ausgangsdatei. Das eigentliche Rendering auf dem TFT (`pushImage()`,
+insbesondere der Farbkanal-Vorbehalt oben) sowie der Upload-Web-Flow
+selbst sind mangels angeschlossenem Board in dieser Session NICHT auf
+echter Hardware bestätigt.
+
+Mit `pio run` gebaut und verifiziert (erfolgreich, Flash 80,1 % /
+1.050.265 B, RAM 27,8 % / 91.120 B - gegenüber dem Stand vor dieser
+Änderung, 79,5 % / 1.041.757 B Flash, 15,3 % / 50.024 B RAM, ein Zuwachs
+von +8.508 B Flash / +41.096 B RAM). Der RAM-Zuwachs ist deutlich größer
+als bei den drei Geschwisterprojekten (dort jeweils nur wenige KB), da
+hier zwei permanente statische Puffer für die Web-BMP-Auslieferung nötig
+sind (siehe oben) - bei 327.680 B Gesamt-RAM bleiben trotzdem knapp 237 KB
+(72 %) frei, unkritisch. Nicht geflasht - kein Board in dieser Session
+angeschlossen.

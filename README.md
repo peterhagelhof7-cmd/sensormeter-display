@@ -102,7 +102,7 @@ Enthalten (P0–P8):
 - Snake (`SnakeGame`): Touch-Drittel-Steuerung, 20x13-Raster, Highscore in
   NVS, Game-Over zeigt 20s den Punktestand
 - Einstellungen (`SettingsUI`, `SettingsManager`, `BacklightManager`):
-  Slide (Intervall 5–60s), Static (Quellenauswahl aus allen 5 Datenquellen),
+  Slide (Intervall 5–60s), Static (Quellenauswahl aus allen 6 Datenquellen),
   Snake, Systemeinstellungen (Helligkeit ±, WLAN neu wählen,
   Sensormeter-Ziel, Ping-Ziele über
   `NumericKeypad`) — alles in NVS persistiert
@@ -123,18 +123,27 @@ Enthalten (P0–P8):
   Einstellungsseite (kein Remote-Versionscheck, siehe
   `docs/entscheidungen.md`), eigene Zwei-Slot-Partitionstabelle
   (`partitions_ota.csv`)
+- Anbieter-Branding (`BrandingManager`, `BrandingView`): freier
+  Anbietername (NVS) + optionales Logo (128×64, RGB565, per Web-Upload auf
+  LittleFS), eigene Datenquelle mit Platzhalter im unkonfigurierten
+  Zustand, Web-Header-Banner auf Dashboard und Einstellungsseite, Logo-
+  Auslieferung als on-the-fly synthetisierter 24-Bit-BMP (kein PNG/JPEG-
+  Decoder) — Konzept von Sensormeter WLAN übernommen, siehe
+  `docs/entscheidungen.md`
 
 Auf echter Hardware verifiziert (wiederholt geflasht und getestet,
 siehe `docs/entscheidungen.md` für die dabei gefundenen und behobenen
-Bugs).
+Bugs) — **Ausnahme: Anbieter-Branding** wurde mangels angeschlossenem
+Board nur per `pio run` gebaut, noch nicht geflasht/getestet.
 
 **Auf einem anderen/frischen Windows-PC**: [`scripts/flash.ps1`](scripts/flash.ps1)
-(oder `.cmd` zum Doppelklicken) fragt zuerst, welches der drei
+(oder `.cmd` zum Doppelklicken) fragt zuerst, welches der vier
 Sensormeter-Projekte geflasht werden soll (Sensormeter / Sensormeter WLAN /
-Sensormeter Display – dasselbe Skript liegt identisch in allen drei Repos),
-richtet danach Python/Git/PlatformIO automatisch ein, klont das gewählte
-Repo falls nötig und baut/flasht das per USB angeschlossene Board in einem
-Rutsch. Details: [`scripts/README.md`](scripts/README.md).
+Sensormeter Display / Sensormeter PoE – dasselbe Skript liegt identisch in
+allen vier Repos), richtet danach Python/Git/PlatformIO automatisch ein,
+klont das gewählte Repo falls nötig und baut/flasht das per USB
+angeschlossene Board in einem Rutsch. Details:
+[`scripts/README.md`](scripts/README.md).
 
 ## Zusammenhang mit dem Sensormeter-Projekt
 

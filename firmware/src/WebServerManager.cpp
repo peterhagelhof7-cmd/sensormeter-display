@@ -3,6 +3,7 @@
 #include <ESP32Ping.h>
 #include <Update.h>
 #include <math.h>
+#include <new>
 #include <time.h>
 
 #include "AlertEvaluator.h"
@@ -92,12 +93,85 @@ const char *kFaviconLink =
     "<rect width='32' height='32' rx='6' fill='%230f1f3d'/>"
     "<circle cx='16' cy='16' r='7' fill='%23c8622a'/></svg>\">";
 
+// Synthetisiert einen 24-Bit-Windows-BMP (BITMAPFILEHEADER 14B +
+// BITMAPINFOHEADER 40B, keine Palette noetig + Pixeldaten) aus dem intern
+// als rohem RGB565-Array gespeicherten Logo, damit es per <img> im
+// Browser darstellbar ist, ohne eine PNG/JPEG-Bibliothek einzubinden
+// (siehe BrandingManager.h). 24 statt 16 Bit, da eine korrekte 16-Bit-BMP
+// eine BITFIELDS-Farbmaskenerweiterung braucht (weniger portabel/mehr
+// Fehlerpotential) - die zusaetzlichen Byte fallen bei dieser Logo-Groesse
+// nicht ins Gewicht. Negative Hoehe im Header waehlt Top-Down-
+// Zeilenreihenfolge, damit die Zeilen nicht erst umgekehrt werden muessen.
+// 128px Breite * 3 Byte = 384 Byte je Zeile ist bereits ein Vielfaches von
+// 4 (BMP-Zeilen muessen auf 4 Byte ausgerichtet sein), daher kein Padding
+// noetig. RGB565->RGB888 per Standard-Bit-Expansion, KEIN Rot/Blau-Tausch
+// (siehe BrandingManager.h fuer die Begruendung/den bekannten
+// Hardware-Vorbehalt).
+//
+// Schreibt in einen vom Aufrufer bereitgestellten Puffer statt selbst zu
+// allozieren: ESPAsyncWebServer's beginResponse(code, type, const uint8_t*,
+// len)-Ueberladung (AsyncProgmemResponse) haelt nur den rohen Pointer und
+// streamt asynchron NACH Rueckkehr aus dieser Funktion - ein sofortiges
+// Freigeben eines heap-allozierten Puffers waere ein Use-after-free. Der
+// Aufrufer nutzt daher einen statischen Puffer (siehe
+// handleBrandingLogoBmp()), analog zum kleineren statischen BMP-Puffer bei
+// den OLED-Geschwisterprojekten.
+constexpr size_t kBmpHeaderBytes = 14 + 40;
+constexpr size_t kBmpTotalBytes =
+    kBmpHeaderBytes + static_cast<size_t>(BrandingManager::kLogoWidth) * BrandingManager::kLogoHeight * 3;
+
+void buildLogoBmp(const uint8_t *rgb565, uint8_t *out) {
+	constexpr int width = BrandingManager::kLogoWidth;
+	constexpr int height = BrandingManager::kLogoHeight;
+	memset(out, 0, kBmpHeaderBytes);
+
+	uint32_t pixelDataOffset = kBmpHeaderBytes;
+	uint32_t fileSize = static_cast<uint32_t>(kBmpTotalBytes);
+	int32_t negHeight = -height;
+	int32_t widthI32 = width;
+
+	out[0] = 'B';
+	out[1] = 'M';
+	memcpy(out + 2, &fileSize, 4);
+	memcpy(out + 10, &pixelDataOffset, 4);
+
+	uint32_t headerSize = 40;
+	uint16_t planes = 1, bpp = 24;
+	uint32_t compression = 0, imageSize = static_cast<uint32_t>(kBmpTotalBytes - kBmpHeaderBytes), ppm = 2835;
+	memcpy(out + 14, &headerSize, 4);
+	memcpy(out + 18, &widthI32, 4);
+	memcpy(out + 22, &negHeight, 4);
+	memcpy(out + 26, &planes, 2);
+	memcpy(out + 28, &bpp, 2);
+	memcpy(out + 30, &compression, 4);
+	memcpy(out + 34, &imageSize, 4);
+	memcpy(out + 38, &ppm, 4);
+	memcpy(out + 42, &ppm, 4);
+
+	const uint16_t *px = reinterpret_cast<const uint16_t *>(rgb565);
+	uint8_t *dst = out + pixelDataOffset;
+	for (int i = 0; i < width * height; i++) {
+		uint16_t v = px[i];
+		uint8_t r5 = (v >> 11) & 0x1F;
+		uint8_t g6 = (v >> 5) & 0x3F;
+		uint8_t b5 = v & 0x1F;
+		uint8_t r8 = (r5 << 3) | (r5 >> 2);
+		uint8_t g8 = (g6 << 2) | (g6 >> 4);
+		uint8_t b8 = (b5 << 3) | (b5 >> 2);
+		// BMP-Pixel liegen als BGR (nicht RGB) - Standardformat, nichts mit
+		// dem TFT-BGR-Vorbehalt oben zu tun.
+		dst[i * 3 + 0] = b8;
+		dst[i * 3 + 1] = g8;
+		dst[i * 3 + 2] = r8;
+	}
+}
+
 } // namespace
 
 WebServerManager::WebServerManager(SettingsManager &settings, BacklightManager &backlight, OtaManager &ota,
                                     WlanManager &wlan, const SensormeterManager &sensormeterManager,
                                     const SensorManager &sensor, const PingManager &pingManager,
-                                    const GraphManager &graph)
+                                    const GraphManager &graph, BrandingManager &brandingManager)
     : settings_(settings),
       backlight_(backlight),
       ota_(ota),
@@ -105,7 +179,8 @@ WebServerManager::WebServerManager(SettingsManager &settings, BacklightManager &
       sensormeterManager_(sensormeterManager),
       sensor_(sensor),
       pingManager_(pingManager),
-      graph_(graph) {}
+      graph_(graph),
+      brandingManager_(brandingManager) {}
 
 bool WebServerManager::checkAuth(AsyncWebServerRequest *request) const {
 	if (!request->authenticate("admin", settings_.webPassword().c_str())) {
@@ -221,6 +296,28 @@ String WebServerManager::bannerHtml(const String &eyebrow, const String &subLine
 		html += "<a class=\"badge\" href=\"" + linkHref + "\">" + escapeHtml(linkLabel) + "</a>";
 	}
 	html += "</div></div>";
+	return html;
+}
+
+// Kleines Branding-Banner (Logo und/oder Anbietername), direkt unterhalb
+// des Haupt-Banners auf jeder Seite - nur ausgegeben, wenn tatsaechlich
+// etwas konfiguriert ist (kein leerer Kasten im unkonfigurierten
+// Default-Fall).
+String WebServerManager::brandingBannerHtml() const {
+	String vendorName = settings_.brandingVendorName();
+	bool hasLogo = brandingManager_.hasLogo();
+	if (vendorName.isEmpty() && !hasLogo) {
+		return "";
+	}
+	String html = "<div style=\"text-align:center;margin:-8px 0 14px;color:#6b6559;font-size:12.5px\">";
+	if (hasLogo) {
+		html += "<img src=\"/branding/logo.bmp\" alt=\"Logo\" style=\"height:28px;vertical-align:middle;"
+		        "margin-right:8px\">";
+	}
+	if (!vendorName.isEmpty()) {
+		html += "<span style=\"vertical-align:middle\">" + escapeHtml(vendorName) + "</span>";
+	}
+	html += "</div>";
 	return html;
 }
 
@@ -356,6 +453,7 @@ String WebServerManager::buildDashboardPage() const {
 		subLine += " · Letzter NTP-Sync: " + lastSync;
 	}
 	html += bannerHtml("Sensormeter Display · Live-Status", subLine, "/settings", "Einstellungen");
+	html += brandingBannerHtml();
 
 	if (alert.active) {
 		html += "<div class=\"alertbar" + String(alert.blue ? " blue" : "") + "\">";
@@ -555,6 +653,7 @@ String WebServerManager::buildSettingsPage(bool saved) const {
 	html += sharedCss();
 	html += "</head><body><div class=\"wrap\">";
 	html += bannerHtml("Einstellungen (angemeldet)", "", "/", "Zur Statusseite");
+	html += brandingBannerHtml();
 	// Bisher nur stiller Redirect nach dem Speichern - kein Hinweis, ob es
 	// tatsaechlich geklappt hat (Nutzer-Feedback). Ohne JS geht das nur per
 	// Redirect-Parameter (siehe handleSave() etc.: "/settings?saved=1").
@@ -568,6 +667,14 @@ String WebServerManager::buildSettingsPage(bool saved) const {
 	html += "<label>Systemname</label><input name=\"name\" value=\"" + escapeHtml(settings_.deviceName()) + "\">";
 	html += "<label>Web-Passwort</label><input name=\"webPw\" type=\"password\" value=\"" +
 	        escapeHtml(settings_.webPassword()) + "\">";
+	html += "</fieldset>";
+
+	html += "<fieldset><legend>Anbieter-Branding</legend>";
+	html += "<label>Anbietername</label><input name=\"brandName\" value=\"" +
+	        escapeHtml(settings_.brandingVendorName()) + "\">";
+	html += "<p class=\"hint\">Erscheint zusätzlich zum Systemnamen auf einer eigenen Ansicht (Datenquelle "
+	        "\"Branding\", siehe Betriebsmodus unten) und im Kopfbereich der Weboberfläche, sobald Name "
+	        "und/oder Logo gesetzt sind.</p>";
 	html += "</fieldset>";
 
 	html += "<fieldset><legend>Betriebsmodus</legend>";
@@ -640,6 +747,21 @@ String WebServerManager::buildSettingsPage(bool saved) const {
 
 	html += "<button type=\"submit\">Speichern</button>";
 	html += "</form>";
+
+	// --- Branding-Logo (eigenes Formular, multipart wie Firmware-Update) ---
+	html += "<fieldset><legend>Branding-Logo</legend>";
+	if (brandingManager_.hasLogo()) {
+		html += "<p><img src=\"/branding/logo.bmp\" alt=\"Logo\" style=\"max-height:60px\"></p>";
+		html += "<form method=\"POST\" action=\"/branding/logo/delete\" style=\"display:inline\">";
+		html += "<button type=\"submit\" class=\"danger\">Logo entfernen</button></form>";
+	}
+	html += "<form method=\"POST\" action=\"/branding/logo\" enctype=\"multipart/form-data\">";
+	html += "<input type=\"file\" name=\"file\" accept=\".bin\">";
+	html += "<button type=\"submit\">Logo hochladen</button></form>";
+	html += "<p class=\"hint\">Erwartet eine vorkonvertierte Rohdatei: 128x64 Pixel, RGB565 (2 Byte/Pixel), "
+	        "genau " + String(BrandingManager::kLogoBytes) + " Byte (kein PNG/JPEG) - erzeugbar mit "
+	        "scripts/convert-logo.ps1 -Display display.</p>";
+	html += "</fieldset>";
 
 	// --- Sensormeter-Ziele (eigene, dynamische Liste) - als Tabelle mit
 	// beschrifteten Spalten, da bei mehreren Zielen sonst nicht erkennbar
@@ -803,6 +925,9 @@ void WebServerManager::handleSave(AsyncWebServerRequest *request) {
 	}
 	if (request->hasParam("smCommunity", true)) {
 		settings_.setSensormeterCommunity(request->getParam("smCommunity", true)->value());
+	}
+	if (request->hasParam("brandName", true)) {
+		settings_.setBrandingVendorName(request->getParam("brandName", true)->value());
 	}
 
 	int16_t tempOffset = settings_.dhtTempOffsetC();
@@ -1008,6 +1133,58 @@ void WebServerManager::handleOtaUploadComplete(AsyncWebServerRequest *request) {
 	}
 }
 
+void WebServerManager::handleBrandingLogoUploadChunk(AsyncWebServerRequest *request, const String &filename,
+                                                      size_t index, uint8_t *data, size_t len, bool final) {
+	if (!checkAuth(request)) return;
+	(void)filename;
+
+	if (index == 0) {
+		brandingUploadOk_ = brandingManager_.beginLogoUpload();
+	}
+	if (brandingUploadOk_) {
+		brandingUploadOk_ = brandingManager_.writeLogoUploadChunk(data, len);
+	}
+	if (final) {
+		brandingUploadOk_ = brandingUploadOk_ && brandingManager_.endLogoUpload();
+	}
+}
+
+void WebServerManager::handleBrandingLogoUploadComplete(AsyncWebServerRequest *request) {
+	if (!checkAuth(request)) return;
+	if (brandingUploadOk_) {
+		request->redirect("/settings?saved=1");
+	} else {
+		request->send(400, "text/plain",
+		               "Logo-Upload fehlgeschlagen (falsches Format/Groesse? Erwartet 128x64, RGB565, " +
+		                   String(BrandingManager::kLogoBytes) + " Byte).");
+	}
+}
+
+void WebServerManager::handleBrandingLogoBmp(AsyncWebServerRequest *request) const {
+	// Statische Puffer (nicht heap-alloziert-und-sofort-freigegeben): siehe
+	// Kommentar bei buildLogoBmp() - der Response-Puffer muss bis zum Ende
+	// der asynchronen Uebertragung gueltig bleiben, die erst NACH dieser
+	// Funktion laeuft.
+	static uint8_t logoBuf[BrandingManager::kLogoBytes];
+	static uint8_t bmpBuf[kBmpTotalBytes];
+
+	if (!brandingManager_.loadLogo(logoBuf, sizeof(logoBuf))) {
+		request->send(404, "text/plain", "Kein Logo hinterlegt");
+		return;
+	}
+	buildLogoBmp(logoBuf, bmpBuf);
+
+	AsyncWebServerResponse *response = request->beginResponse(200, "image/bmp", bmpBuf, sizeof(bmpBuf));
+	response->addHeader("Cache-Control", "no-cache");
+	request->send(response);
+}
+
+void WebServerManager::handleBrandingLogoDelete(AsyncWebServerRequest *request) {
+	if (!checkAuth(request)) return;
+	brandingManager_.deleteLogo();
+	request->redirect("/settings?saved=1");
+}
+
 void WebServerManager::begin() {
 	// "/" ist bewusst NICHT per checkAuth() geschuetzt - oeffentliches
 	// Live-Status-Dashboard, siehe docs/entscheidungen.md.
@@ -1043,6 +1220,16 @@ void WebServerManager::begin() {
 	    "/ota/upload", HTTP_POST, [this](AsyncWebServerRequest *request) { handleOtaUploadComplete(request); },
 	    [this](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len,
 	           bool final) { handleOtaUploadChunk(request, filename, index, data, len, final); });
+
+	server_.on("/branding/logo.bmp", HTTP_GET,
+	           [this](AsyncWebServerRequest *request) { handleBrandingLogoBmp(request); });
+	server_.on("/branding/logo/delete", HTTP_POST,
+	           [this](AsyncWebServerRequest *request) { handleBrandingLogoDelete(request); });
+	server_.on(
+	    "/branding/logo", HTTP_POST,
+	    [this](AsyncWebServerRequest *request) { handleBrandingLogoUploadComplete(request); },
+	    [this](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len,
+	           bool final) { handleBrandingLogoUploadChunk(request, filename, index, data, len, final); });
 
 	server_.begin();
 }

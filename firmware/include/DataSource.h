@@ -9,6 +9,14 @@ enum class DataSource : uint8_t {
 	Sensormeter = 2,
 	Ping = 3,
 	PingTargets = 4,
+	// Anbieter-Branding (Weisslabel) - wie die anderen Quellen immer Teil
+	// der Rotation/Auswahl, auch unkonfiguriert (zeigt dann einen
+	// Platzhalter, siehe BrandingView) - bewusst KEIN dynamisches
+	// Ein-/Ausblenden wie bei den OLED-Geschwisterprojekten, da diese
+	// Liste hier ohnehin nie nach Konfigurationsstand filtert (Sensormeter/
+	// Ping-Ziele bleiben ebenso in der Rotation, wenn nichts konfiguriert
+	// ist).
+	Branding = 5,
 };
 
 enum class OperatingMode : uint8_t {
@@ -18,9 +26,9 @@ enum class OperatingMode : uint8_t {
 
 constexpr DataSource kAvailableDataSources[] = {
     DataSource::Dht11, DataSource::Uhrzeit, DataSource::Sensormeter, DataSource::Ping,
-    DataSource::PingTargets,
+    DataSource::PingTargets, DataSource::Branding,
 };
-constexpr size_t kAvailableDataSourceCount = 5;
+constexpr size_t kAvailableDataSourceCount = 6;
 
 // Kurz gehalten, da diese Labels in einer schmalen Listenzeile (Font 4,
 // ca. 300px Breite) Platz finden muessen - siehe SettingsUI.cpp.
@@ -31,6 +39,7 @@ inline const char *dataSourceLabel(DataSource s) {
 		case DataSource::Sensormeter: return "Sensormeter";
 		case DataSource::Ping: return "Ping";
 		case DataSource::PingTargets: return "Ping-Ziele";
+		case DataSource::Branding: return "Branding";
 	}
 	return "?";
 }

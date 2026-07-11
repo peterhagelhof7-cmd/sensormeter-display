@@ -144,7 +144,7 @@
   <div class="badges">
     <span class="badge badge-orange">v0.9.0-rc3 · Beta</span>
     <span class="badge">HW-458B · ESP32</span>
-    <span class="badge">Touch-UI · Webserver · OTA</span>
+    <span class="badge">Touch-UI · Webserver · Branding · OTA</span>
     <span class="badge">github.com/peterhagelhof7-cmd/sensormeter-display</span>
   </div>
 </div>
@@ -370,7 +370,7 @@ Inhaltsbereich der aktiven Datenquelle.</p>
 
 <!-- ============================================================ -->
 <h1 class="section" id="sec4"><span class="num">4</span>Datenquellen (Screens)</h1>
-<p>Fünf Datenquellen stehen zur Auswahl (Slide-Modus wechselt automatisch
+<p>Sechs Datenquellen stehen zur Auswahl (Slide-Modus wechselt automatisch
 zwischen allen, Static-Modus zeigt dauerhaft eine feste Quelle — siehe
 Abschnitt 5).</p>
 
@@ -482,7 +482,27 @@ Abschnitt 5).</p>
   </div>
 </div>
 
-<h2>4.6 Snake (Bonus-Modus)</h2>
+<h2>4.6 Anbieter-Branding</h2>
+<div class="sketch-wrap">
+  <div class="device"><div class="screen">
+    <div class="sk-bar top"><div class="sk-icon gear"></div><div class="sk-icon info"></div><div class="sk-bars"><span style="height:2mm;"></span><span style="height:2.5mm;"></span><span style="height:3mm;"></span></div><div class="sk-dht">22C&nbsp;&nbsp;48%</div></div>
+    <div class="sk-content full"><div class="sk-label" style="font-size:4mm; font-weight:700;">Musterfirma GmbH</div></div>
+    <div class="sk-bar bottom"><div style="font-size:4mm; font-weight:700;">14:32</div><div style="font-size:2.6mm;">Mo 08.07.2026</div></div>
+  </div></div>
+  <div class="sketch-notes">
+    <ul>
+      <li>Optionale Weisslabel-Kennzeichnung: freier Anbietername und/oder
+      ein Logo-Bild (128×64 Pixel, Farbe), unabhängig vom Systemnamen</li>
+      <li>Zeigt bevorzugt das Logo zentriert; ohne Logo den Anbietername als
+      Textzeile</li>
+      <li>Ohne konfigurierten Namen UND Logo: „Kein Branding konfiguriert“</li>
+      <li>Konfiguration nur über die Weboberfläche (Abschnitt 7.5) — Logo-
+      Upload braucht eine vorkonvertierte Datei, siehe dort</li>
+    </ul>
+  </div>
+</div>
+
+<h2>4.7 Snake (Bonus-Modus)</h2>
 <p>Kein reguläres Slide-Element, sondern über das Einstellungen-Menü
 aufrufbar (Abschnitt 5.1). Steuerung per Touch: oberes Bildschirmdrittel =
 hoch, unteres = runter, linkes = links, rechtes = rechts. Bei Spielende
@@ -689,11 +709,18 @@ eigenständige Bereiche mit eigenen Speichern-/Hinzufügen-Buttons
   <tr><th>Feld</th><th>Bedeutung</th></tr>
   <tr><td>Slide / Static</td><td>Entspricht der Touch-Auswahl aus Abschnitt 5.1 — hier per Radio-Button wählbar.</td></tr>
   <tr><td>Slide-Intervall</td><td>5–60 Sekunden (Schrittweite 5), nur bei Modus „Slide“ relevant.</td></tr>
-  <tr><td>Datenquelle</td><td>Dropdown mit allen 5 Datenquellen, nur bei Modus „Static“ relevant.</td></tr>
+  <tr><td>Datenquelle</td><td>Dropdown mit allen 6 Datenquellen, nur bei Modus „Static“ relevant.</td></tr>
 </table>
 
 <h3>Helligkeit</h3>
 <p>0–100 %, identisch zur Touch-Einstellung (Abschnitt 5.4).</p>
+
+<h3>Anbieter-Branding</h3>
+<table>
+  <tr><th>Feld</th><th>Bedeutung</th></tr>
+  <tr><td>Anbietername</td><td>Erscheint zusätzlich zum Systemnamen auf der Datenquelle „Branding“ (Abschnitt 4.6) und im Kopfbereich von Dashboard und Einstellungsseite, sobald Name und/oder Logo gesetzt sind.</td></tr>
+</table>
+<p class="hint">Logo-Upload/-Löschen ist ein eigener Bereich, siehe Abschnitt 7.5.</p>
 
 <h3>Sensormeter (SNMP)</h3>
 <table>
@@ -768,6 +795,27 @@ alle 30 Sekunden. Zeigt:</p>
 </ul>
 <p>Über den Button „Einstellungen“ oben rechts geht es zur
 passwortgeschützten Konfigurationsseite (Abschnitt 7.1).</p>
+
+<h2>7.5 Anbieter-Branding (Weisslabel)</h2>
+<p>Eigener Bereich „Branding-Logo“ auf der Einstellungsseite, unterhalb
+des Haupt-„Speichern“-Buttons (eigenes Formular, wie der Firmware-Upload
+in Abschnitt 8). Ist ein Logo hinterlegt, erscheint es zusätzlich klein
+im Kopfbereich von Dashboard <b>und</b> Einstellungsseite.</p>
+<table>
+  <tr><th>Feld/Button</th><th>Bedeutung</th></tr>
+  <tr><td>Logo hochladen</td><td>Erwartet eine vorkonvertierte Rohdatei: 128×64 Pixel, RGB565 (2 Byte/Pixel), genau 16.384 Byte (kein PNG/JPEG) — erzeugbar mit <span class="code">scripts/convert-logo.ps1 -Display display</span>.</td></tr>
+  <tr><td>Logo entfernen</td><td>Nur sichtbar, wenn aktuell ein Logo hinterlegt ist.</td></tr>
+</table>
+<div class="callout warn">
+  <div class="callout-title">Farbkanal-Vorbehalt — nicht auf echter Hardware verifiziert</div>
+  Dieses Panel läuft mit einer nicht ganz spezifikationsgemäßen BGR-Farbeinstellung
+  (an anderer Stelle dieser Firmware mussten deshalb bereits einzelne
+  Farbnamen getauscht werden, siehe <span class="code">docs/entscheidungen.md</span>).
+  Erscheint ein hochgeladenes Logo auf dem Gerät sichtbar falschfarbig
+  (Rot/Blau vertauscht), das Logo erneut mit
+  <span class="code">scripts/convert-logo.ps1 -Display display -SwapRedBlue</span>
+  konvertieren und neu hochladen.
+</div>
 
 <!-- ============================================================ -->
 <h1 class="section" id="sec8"><span class="num">8</span>Firmware-Updates</h1>

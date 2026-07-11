@@ -164,6 +164,26 @@ hinterlegen (kein automatisches Discovery).
   - Darstellung: eigene Slide, eine Zeile pro Ziel (IP-Adresse + Status),
     Zeile grün bei Antwort, Zeile rot bei Fehler
 
+7.5 Anbieter-Branding (Weisslabel)
+Wie die anderen Sensormeter-Projekte (siehe deren docs/entscheidungen.md):
+optionale Zusatzkennzeichnung, unabhängig vom Systemnamen - freier
+Anbietername und/oder ein Logo-Bild. Beide unabhängig voneinander
+optional; ohne beides zeigt diese Slide einen Platzhalter ("Kein
+Branding konfiguriert") statt zu entfallen - anders als bei den
+OLED-Geschwisterprojekten (dort dynamisches Ein-/Ausblenden), da diese
+Datenquellen-Liste ohnehin nie nach Konfigurationsstand filtert (auch
+Sensormeter-/Ping-Ziele bleiben unkonfiguriert in der Rotation).
+
+- Logo-Format: 128x64 Pixel (dieselbe Auflösung wie bei den OLED-Projekten,
+  aber RGB565-Farbe statt 1-Bit-Monochrom), 2 Byte pro Pixel Little-Endian,
+  exakt 16.384 Byte - kein PNG/JPEG-Decoder eingebunden. Erzeugbar mit
+  scripts/convert-logo.ps1 -Display display.
+- Darstellung: bevorzugt das Logo zentriert im Inhaltsbereich, ohne Logo
+  der Anbietername als grosse Textzeile.
+- Weboberfläche: Logo (falls vorhanden) und Anbietername erscheinen im
+  Kopfbereich von Dashboard UND Einstellungsseite.
+- Logo-Upload/-Löschen über die Einstellungsseite (Abschnitt 11).
+
 ------------------------------------------------------------
 
 8. NORMALER BETRIEB – ABFRAGETAKTE

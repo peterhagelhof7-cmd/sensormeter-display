@@ -35,6 +35,7 @@ void SettingsManager::load() {
 	}
 	deviceName_ = prefs.getString("name", "Sensormeter Display");
 	webPassword_ = prefs.getString("webPw", "admin");
+	brandingVendorName_ = prefs.getString("brandName", "");
 
 	dhtTempOffsetC_ = prefs.getShort("dTOff", 0);
 	dhtHumOffsetPct_ = prefs.getShort("dHOff", 0);
@@ -91,6 +92,7 @@ void SettingsManager::save() {
 	prefs.putString("smCommunity", sensormeterCommunity_);
 	prefs.putString("name", deviceName_);
 	prefs.putString("webPw", webPassword_);
+	prefs.putString("brandName", brandingVendorName_);
 	prefs.putShort("dTOff", dhtTempOffsetC_);
 	prefs.putShort("dHOff", dhtHumOffsetPct_);
 	prefs.putUInt("dTOffTs", dhtOffsetSetTs_);
@@ -398,6 +400,20 @@ void SettingsManager::setDeviceName(const String &name) {
 void SettingsManager::setWebPassword(const String &password) {
 	xSemaphoreTake(mutex_, portMAX_DELAY);
 	webPassword_ = password.isEmpty() ? "admin" : password;
+	save();
+	xSemaphoreGive(mutex_);
+}
+
+String SettingsManager::brandingVendorName() const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	String v = brandingVendorName_;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+void SettingsManager::setBrandingVendorName(const String &name) {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	brandingVendorName_ = name;
 	save();
 	xSemaphoreGive(mutex_);
 }

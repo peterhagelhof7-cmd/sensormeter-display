@@ -100,6 +100,14 @@ public:
 	void setDeviceName(const String &name);
 	void setWebPassword(const String &password);
 
+	// Anbieter-Branding (Weisslabel), siehe BrandingManager fuer das
+	// zugehoerige Logo (liegt dort separat auf LittleFS, nicht in NVS - ein
+	// 40000-Byte-Logo waere fuer einen einzelnen NVS-Eintrag ungeeignet
+	// gross). Leer = kein Anbietername gesetzt, anders als deviceName()
+	// OHNE Default-Fallback.
+	String brandingVendorName() const;
+	void setBrandingVendorName(const String &name);
+
 	// Warnschwellwerte (nur ueber den Webserver einstellbar, siehe
 	// docs/entscheidungen.md): bei Ueber-/Unterschreitung faerbt main.cpp den
 	// gesamten Bildschirm rot - derselbe Mechanismus wie der bestehende
@@ -158,6 +166,7 @@ private:
 
 	String deviceName_ = "Sensormeter Display";
 	String webPassword_ = "installer";
+	String brandingVendorName_;
 
 	int16_t dhtTempOffsetC_ = 0;
 	int16_t dhtHumOffsetPct_ = 0;

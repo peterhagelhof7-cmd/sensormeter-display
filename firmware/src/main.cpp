@@ -26,6 +26,8 @@
 #include "WebServerManager.h"
 #include "InfoUI.h"
 #include "AlertEvaluator.h"
+#include "BrandingManager.h"
+#include "BrandingView.h"
 
 namespace {
 // Wandelt den frei waehlbaren Systemnamen in einen gueltigen mDNS-Hostnamen
@@ -68,7 +70,10 @@ SettingsManager settings;
 BacklightManager backlight;
 SettingsUI settingsUI;
 OtaManager ota;
-WebServerManager webServer(settings, backlight, ota, wlan, sensormeterManager, sensor, pingManager, graph);
+BrandingManager brandingManager;
+BrandingView brandingView;
+WebServerManager webServer(settings, backlight, ota, wlan, sensormeterManager, sensor, pingManager, graph,
+                            brandingManager);
 
 uint32_t lastStatusBarMs = 0;
 // 300ms statt z.B. 1000ms, damit das 500ms-Blinken des WLAN-Symbols nicht
@@ -133,6 +138,7 @@ void setup() {
 	graph.begin();
 	pingManager.begin();
 	sensormeterManager.begin();
+	brandingManager.begin();
 	webServer.begin();
 }
 
@@ -170,6 +176,7 @@ void loop() {
 		graph.forceRedraw();
 		pingView.forceRedraw();
 		statusBar.forceRedraw();
+		brandingView.forceRedraw();
 	}
 
 	// Info-Symbol antippbar - oeffnet InfoUI (Systemname/IP/DHCP-Static),
@@ -185,6 +192,7 @@ void loop() {
 		graph.forceRedraw();
 		pingView.forceRedraw();
 		statusBar.forceRedraw();
+		brandingView.forceRedraw();
 	}
 
 	// Ansichtswechsel per Tippen auf die linke (vorige) bzw. rechte
@@ -264,6 +272,9 @@ void loop() {
 				break;
 			case DataSource::PingTargets:
 				pingView.drawTargetList(display, pingManager, Layout::kContentTop, contentBottom, bgColor);
+				break;
+			case DataSource::Branding:
+				brandingView.draw(display, brandingManager, settings, Layout::kContentTop, contentBottom, bgColor);
 				break;
 		}
 		contentDirty = false;

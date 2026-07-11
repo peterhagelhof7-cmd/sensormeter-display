@@ -146,9 +146,11 @@ Async-Webserver (ESPAsyncWebServer/AsyncTCP, Port 80), zwei Seiten:
 inkl. DHT11-Verlaufsgraph als inline SVG und Alarmbanner; "/settings"
 (HTTP-Basic-Auth) enthält das Einstellungsformular (Name, Passwort,
 Betriebsmodus, Helligkeit, Sensormeter-Ziele inkl. Warnschwellwerte,
-DHT11-Kalibrierkorrektur, Ping-Ziele inkl. Warnschwellwerte, Netzwerk)
-+ OTA-Upload-Endpunkt. Nutzt zusätzlich `AlertEvaluator::computeAlertInfo()`
-(siehe 2.26) für den Alarmbanner. Kein REST-API/JSON.
+DHT11-Kalibrierkorrektur, Ping-Ziele inkl. Warnschwellwerte, Netzwerk,
+Anbieter-Branding) + OTA-Upload-Endpunkt sowie den Branding-Logo-Upload-
+und -Auslieferungs-Endpunkt (siehe 2.28). Nutzt zusätzlich
+`AlertEvaluator::computeAlertInfo()` (siehe 2.26) für den Alarmbanner.
+Kein REST-API/JSON.
 
 2.26 AlertEvaluator
 Reine Auswertungsfunktion (kein Objekt/State), aus main.cpp ausgelagert:
@@ -158,6 +160,26 @@ Richtung rot/blau, betroffene Quelle, Anzahl weiterer gleichzeitig
 betroffener Quellen). Wird identisch von main.cpp (Touch-UI/LED/Blink-
 Hintergrund) UND WebServerManager (Dashboard-Alarmbanner) aufgerufen,
 damit beide Anzeigen nie auseinanderlaufen können.
+
+2.27 BrandingManager
+Anbieter-Branding (Weisslabel), siehe docs/lastenheft.txt Abschnitt 7.5 -
+zuerst bei Sensormeter WLAN eingeführt (siehe dessen docs/entscheidungen.md),
+hier aber eine Neuentwicklung statt reiner Portierung (Farb-TFT statt
+monochromes OLED). Verwaltet ausschließlich das Logo-Bild auf LittleFS
+(/branding-logo.bin, 128x64 Pixel RGB565, exakt 16.384 Byte, eigener
+Mutex) - der Anbietername selbst liegt in SettingsManager (siehe 2.18/3.1).
+Tmp-Datei-plus-Umbenennen-Upload wie ConfigManager::save() bei den
+Geschwistern. hasLogo() hält den Vorhanden-Zustand in einem RAM-Cache
+statt bei jeder Abfrage LittleFS.exists() aufzurufen (Bibliotheks-Quirk,
+siehe sensormeter-wlan/repo/docs/entscheidungen.md).
+
+2.28 BrandingView
+Zeichnet DataSource::Branding (siehe 2.17): bevorzugt das Logo zentriert
+im Inhaltsbereich (TFT_eSPI::pushImage()), ohne Logo den Anbietername als
+Textzeile, ohne beides einen Platzhalter - gleicher Redraw-Cache wie
+ClockView/PingView. WebServerManager liefert dasselbe Logo zusätzlich als
+on-the-fly synthetisierten 24-Bit-BMP unter /branding/logo.bmp aus (kein
+PNG/JPEG-Decoder eingebunden).
 
 ------------------------------------------------------------
 
@@ -169,13 +191,16 @@ zentralen Konfigurationsdatei:
 - "touch" (TouchManager): Kalibrierkoeffizienten (xMin/xMax/yMin/yMax)
 - "settings" (SettingsManager): Betriebsmodus, Slide-Intervall,
   Static-Quelle, Helligkeit, Sensormeter-IP+Community, Ping-Ziele (bis 5),
-  Gerätename, Web-Passwort
+  Gerätename, Web-Passwort, Anbieter-Branding-Vendorname (brandName, leer =
+  inaktiv)
 - "snake" (SnakeGame): Highscore
 
 3.2 LittleFS
 - `/history.csv`: DHT11-Ringpuffer, 24 Einträge (Zeitstempel, Temperatur
   °C, Luftfeuchte %), Speicherintervall 30 Minuten, wird beim Boot
   vollständig geladen
+- `/branding-logo.bin`: optional, nur vorhanden wenn ein Logo hochgeladen
+  wurde - 128x64 Pixel RGB565, exakt 16.384 Byte (siehe 2.27)
 
 ------------------------------------------------------------
 

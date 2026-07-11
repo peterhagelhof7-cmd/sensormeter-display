@@ -11,6 +11,7 @@
 #include "SensorManager.h"
 #include "PingManager.h"
 #include "GraphManager.h"
+#include "BrandingManager.h"
 
 // Webserver mit zwei Seiten (siehe docs/entscheidungen.md):
 // - "/" : oeffentliches, NICHT passwortgeschuetztes Status-Dashboard
@@ -30,7 +31,7 @@ public:
 	// SVG-Verlaufsgraph im Dashboard.
 	WebServerManager(SettingsManager &settings, BacklightManager &backlight, OtaManager &ota, WlanManager &wlan,
 	                  const SensormeterManager &sensormeterManager, const SensorManager &sensor,
-	                  const PingManager &pingManager, const GraphManager &graph);
+	                  const PingManager &pingManager, const GraphManager &graph, BrandingManager &brandingManager);
 
 	void begin();
 
@@ -66,6 +67,19 @@ private:
 	                           uint8_t *data, size_t len, bool final);
 	void handleOtaUploadComplete(AsyncWebServerRequest *request);
 
+	// Anbieter-Branding: Logo-Upload (Streaming, analog handleOtaUploadChunk/
+	// -Complete), Logo-Auslieferung als on-the-fly synthetisiertes 24-Bit-BMP
+	// (kein PNG/JPEG-Decoder noetig, siehe BrandingManager.h) und Loeschen.
+	void handleBrandingLogoUploadChunk(AsyncWebServerRequest *request, const String &filename, size_t index,
+	                                    uint8_t *data, size_t len, bool final);
+	void handleBrandingLogoUploadComplete(AsyncWebServerRequest *request);
+	void handleBrandingLogoBmp(AsyncWebServerRequest *request) const;
+	void handleBrandingLogoDelete(AsyncWebServerRequest *request);
+	// Kleines "Branding-Banner" (Logo und/oder Anbietername) unterhalb des
+	// Haupt-Banners - nur ausgegeben, wenn tatsaechlich etwas konfiguriert
+	// ist, siehe bannerHtml().
+	String brandingBannerHtml() const;
+
 	SettingsManager &settings_;
 	BacklightManager &backlight_;
 	OtaManager &ota_;
@@ -74,8 +88,10 @@ private:
 	const SensorManager &sensor_;
 	const PingManager &pingManager_;
 	const GraphManager &graph_;
+	BrandingManager &brandingManager_;
 	AsyncWebServer server_{80};
 
 	bool otaInProgress_ = false;
 	bool otaSuccess_ = false;
+	bool brandingUploadOk_ = false;
 };
