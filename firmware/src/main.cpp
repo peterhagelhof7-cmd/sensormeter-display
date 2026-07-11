@@ -75,6 +75,152 @@ BrandingView brandingView;
 WebServerManager webServer(settings, backlight, ota, wlan, sensormeterManager, sensor, pingManager, graph,
                             brandingManager);
 
+// Serial-Kommandozeile fuer den Fall, dass das Geraet nur per USB, aber
+// nicht per Netzwerk erreichbar ist (z.B. falsche/unbekannte
+// WLAN-Zugangsdaten, statische IP in einem fremden Netzsegment). Bewusst
+// dasselbe Vertrauensmodell wie bei den drei OLED-Geschwisterprojekten
+// (physischer USB-Zugriff = vertrauenswuerdig, kein Web-Passwort noetig) -
+// NICHT pauschal destruktiv: nur "reset"/"reset all" loeschen etwas, alle
+// anderen Kommandos aendern gezielt nur die WLAN-/IP-Felder. Anders als bei
+// den Geschwisterprojekten gibt es hier kein "dump"/"upload" (kein
+// XML-Konfigurationsdokument - Einstellungen liegen einzeln in NVS/
+// Preferences, siehe SettingsManager/WlanManager), siehe docs/entscheidungen.md.
+//
+// Kommandos (jeweils + Enter):
+//   dhcp                          WLAN auf DHCP umstellen, statische
+//                                  IP/Maske/Gateway loeschen, neu starten
+//   ip <ip> <maske> <gateway>     statische IP setzen, neu starten. Anders
+//                                  als die Einstellungsseite OHNE
+//                                  Ping-Kollisionspruefung - bewusst einfach
+//                                  gehalten. Kein DNS-Feld (WlanManager
+//                                  kennt keine separate DNS-Konfiguration)
+//   wifi <ssid> <passwort>        neue WLAN-Zugangsdaten setzen, neu starten
+//   status                        aktuellen Zustand ausgeben (WLAN, IP,
+//                                  Signal, Sensor, Heap, Laufzeit) - liest
+//                                  nur, aendert nichts, kein Neustart
+//   reset                         Werksreset nur der Konfiguration (wie
+//                                  Umfang "Nur Konfiguration" auf der
+//                                  Einstellungsseite, inkl. WLAN, ohne
+//                                  Branding-Erhalt), neu starten - der
+//                                  12h-Verlauf bleibt erhalten
+//   reset all                     wie oben, zusaetzlich wird der 12h-Verlauf
+//                                  geloescht UND das Branding entfernt
+void handleSerialCommands() {
+	static String line;
+
+	while (Serial.available()) {
+		char c = static_cast<char>(Serial.read());
+		if (c == '\r') continue;
+		if (c != '\n') {
+			line += c;
+			continue;
+		}
+		line.trim();
+
+		String cmd = line;
+		String args;
+		int sp = line.indexOf(' ');
+		if (sp >= 0) {
+			cmd = line.substring(0, sp);
+			args = line.substring(sp + 1);
+			args.trim();
+		}
+
+		if (cmd.equalsIgnoreCase("dhcp")) {
+			wlan.clearStaticIp();
+			Serial.println("[SERIAL] WLAN auf DHCP umgestellt, starte neu...");
+			delay(300);
+			ESP.restart();
+
+		} else if (cmd.equalsIgnoreCase("ip")) {
+			String parts[3];
+			int count = 0;
+			String rest = args;
+			while (rest.length() > 0 && count < 3) {
+				int sp2 = rest.indexOf(' ');
+				if (sp2 < 0) {
+					parts[count++] = rest;
+					rest = "";
+				} else {
+					parts[count++] = rest.substring(0, sp2);
+					rest = rest.substring(sp2 + 1);
+					rest.trim();
+				}
+			}
+			IPAddress ip, mask, gateway;
+			if (count < 3 || !ip.fromString(parts[0]) || !mask.fromString(parts[1]) ||
+			    !gateway.fromString(parts[2])) {
+				Serial.println("[SERIAL] Nutzung: ip <adresse> <maske> <gateway>");
+			} else {
+				wlan.saveStaticIp(ip, gateway, mask);
+				Serial.println("[SERIAL] Statische IP gesetzt, starte neu...");
+				delay(300);
+				ESP.restart();
+			}
+
+		} else if (cmd.equalsIgnoreCase("wifi")) {
+			int sp3 = args.indexOf(' ');
+			if (sp3 < 0 || args.substring(0, sp3).length() == 0) {
+				Serial.println("[SERIAL] Nutzung: wifi <ssid> <passwort>");
+			} else {
+				String ssid = args.substring(0, sp3);
+				String psk = args.substring(sp3 + 1);
+				psk.trim();
+				wlan.saveCredentials(ssid, psk);
+				Serial.println("[SERIAL] WLAN-Zugangsdaten gesetzt, starte neu...");
+				delay(300);
+				ESP.restart();
+			}
+
+		} else if (cmd.equalsIgnoreCase("status")) {
+			Serial.println("[SERIAL] --- Status ---");
+			Serial.print("WLAN: ");
+			if (wlan.isConnected()) {
+				Serial.println("verbunden");
+			} else {
+				Serial.println("nicht verbunden");
+			}
+			Serial.print("IP: ");
+			Serial.println(WiFi.localIP());
+			Serial.print("Signal: ");
+			Serial.print(wlan.isConnected() ? WiFi.RSSI() : 0);
+			Serial.println(" dBm");
+			Serial.print("Sensor: ");
+			if (sensor.hasValidReading()) {
+				Serial.print(sensor.temperatureC(), 1);
+				Serial.print(" C / ");
+				Serial.print(sensor.humidityPercent(), 1);
+				Serial.println(" %");
+			} else {
+				Serial.println("kein gueltiger Messwert");
+			}
+			Serial.print("Freier Heap: ");
+			Serial.print(ESP.getFreeHeap() / 1024);
+			Serial.println(" kB");
+			Serial.print("Laufzeit: ");
+			Serial.print((unsigned long)(esp_timer_get_time() / 1000000ULL));
+			Serial.println(" s");
+			Serial.println("[SERIAL] --- Ende Status ---");
+
+		} else if (cmd.equalsIgnoreCase("reset")) {
+			bool full = args.equalsIgnoreCase("all");
+			settings.resetConfig(/*keepBrandingName=*/!full);
+			wlan.clearCredentials();
+			if (full) {
+				graph.reset();
+				brandingManager.deleteLogo();
+				Serial.println("[SERIAL] Werksreset: Konfiguration, Verlauf und Branding geloescht, starte neu...");
+			} else {
+				Serial.println("[SERIAL] Werksreset: Konfiguration auf Standard zurueckgesetzt, starte neu...");
+			}
+			delay(300);
+			ESP.restart();
+		}
+
+		line = "";
+	}
+}
+
 uint32_t lastStatusBarMs = 0;
 // 300ms statt z.B. 1000ms, damit das 500ms-Blinken des WLAN-Symbols nicht
 // mit der Redraw-Rate aliast (bei exaktem 1000ms-Takt wuerde immer dieselbe
@@ -91,6 +237,7 @@ void setup() {
 	Serial.begin(115200);
 	delay(200);
 	Serial.println("Sensormeter Display - Boot");
+	Serial.println("[SERIAL] Kommandos: dhcp, ip, wifi, status, reset[ all] (+ Enter)");
 
 	display.begin();
 	display.drawBootScreen("Sensormeter Display", "P7/P8: Sensormeter + Ping");
@@ -158,6 +305,8 @@ DataSource currentActiveSource() {
 }
 
 void loop() {
+	handleSerialCommands();
+
 	// Zahnrad in der Statusleiste antippbar - oeffnet die Einstellungen
 	// (blockierend). Erst auf Loslassen warten, damit der modale Dialog
 	// nicht denselben, noch gehaltenen Tipp als seinen ersten Tastendruck

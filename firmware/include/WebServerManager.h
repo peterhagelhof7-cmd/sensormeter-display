@@ -31,7 +31,7 @@ public:
 	// SVG-Verlaufsgraph im Dashboard.
 	WebServerManager(SettingsManager &settings, BacklightManager &backlight, OtaManager &ota, WlanManager &wlan,
 	                  const SensormeterManager &sensormeterManager, const SensorManager &sensor,
-	                  const PingManager &pingManager, const GraphManager &graph, BrandingManager &brandingManager);
+	                  const PingManager &pingManager, GraphManager &graph, BrandingManager &brandingManager);
 
 	void begin();
 
@@ -63,6 +63,7 @@ private:
 	void handleSensormeterThresholds(AsyncWebServerRequest *request);
 	void handlePingThreshold(AsyncWebServerRequest *request);
 	void handleNetworkSave(AsyncWebServerRequest *request);
+	void handleFactoryReset(AsyncWebServerRequest *request);
 	void handleOtaUploadChunk(AsyncWebServerRequest *request, const String &filename, size_t index,
 	                           uint8_t *data, size_t len, bool final);
 	void handleOtaUploadComplete(AsyncWebServerRequest *request);
@@ -87,7 +88,7 @@ private:
 	const SensormeterManager &sensormeterManager_;
 	const SensorManager &sensor_;
 	const PingManager &pingManager_;
-	const GraphManager &graph_;
+	GraphManager &graph_;
 	BrandingManager &brandingManager_;
 	AsyncWebServer server_{80};
 

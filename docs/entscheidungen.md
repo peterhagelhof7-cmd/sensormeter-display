@@ -1546,3 +1546,73 @@ korrigiert.
 Getestet: Headless-Chrome-Screenshots hell/dunkel, `getBoundingClientRect()`-
 Vermessung aller vier Karten (keine Überlappung mehr). Rein statisches
 HTML/CSS/SVG ohne Firmware-Bezug, kein Board nötig.
+
+## Werksreset-Umfangsauswahl + Serial-Kommandozeile neu gebaut (nicht portiert), Version auf 0.9.0-rc4
+
+Beide Features wurden zuerst in Sensormeter WLAN gebaut und dort auf echter
+Hardware verifiziert, dann auf die drei Geschwisterprojekte (Sensormeter,
+Sensormeter PoE) portiert - siehe deren jeweilige `entscheidungen.md`. Bei
+Sensormeter Display war ein reiner Port NICHT möglich: dieses Projekt hatte
+bisher **überhaupt keinen Werksreset** (weder Taster noch Web) und **keine
+XML-Konfiguration** - Einstellungen liegen einzeln in NVS/Preferences
+(`SettingsManager`, `WlanManager`) statt in einer `DeviceConfig`-Struktur
+mit `exportXml()`/`importXml()`. Rücksprache mit dem Nutzer ergab: vollen
+Funktionsumfang bauen, aber OHNE `dump`/`upload` (kein XML-Dokument, das
+sich sinnvoll ex-/importieren ließe - ein neues JSON-Format nur für dieses
+eine Projekt wäre unverhältnismäßiger Aufwand gegenüber dem Nutzen).
+
+**Neue Reset-Primitive** (vorher nicht vorhanden):
+- `SettingsManager::resetConfig(bool keepBrandingName)`: leert den kompletten
+  NVS-Namespace "settings" (Modus, Helligkeit, Sensormeter-/Ping-Ziele samt
+  Schwellwerten, DHT11-Kalibrierung, Geräte­name, Web-Passwort) und lädt die
+  eingebauten Defaults in den RAM-Zustand zurück; `keepBrandingName` schreibt
+  den Anbieternamen nach dem `clear()` wieder zurück (Umfang "Konfiguration").
+- `WlanManager::clearCredentials()`: leert den kompletten NVS-Namespace
+  "wifi" (SSID/PSK UND statische IP) - ein Neustart landet danach wieder im
+  Onboarding.
+- `GraphManager::reset()`: leert den 12h-Ringpuffer und löscht `history.csv`.
+
+Alle drei sind bewusst getrennte, gezielte Operationen statt eines
+einzelnen "alles"-Resets - der Aufrufer (`WebServerManager::
+handleFactoryReset()`, `main.cpp::handleSerialCommands()`) kombiniert sie
+je nach gewähltem Umfang (Alles/Konfiguration/Messwerte/Branding), analog
+zum `DeviceConfig()`-Default-Konstruktor-Muster der drei Geschwisterprojekte.
+
+**Bewusst NICHT angerührt**: die Touch-Kalibrierung (`TouchManager`, NVS-
+Namespace "touch") - das sind physische Rohwert-Extrema des
+Touch-Controllers, kein Konfigurationswert im Sinne des Lastenhefts. Bei
+keinem der drei Geschwisterprojekte gibt es eine vergleichbare
+Hardware-Kalibrierung, die ein Werksreset ausließe (deren
+Sensor-Temperatur-/Feuchte-Offsets sind dagegen echte Konfigurationswerte
+und werden mitzurückgesetzt - hier ebenso, `dhtTempOffsetC`/
+`dhtHumOffsetPct` sind Teil von `resetConfig()`).
+
+**Web** (`WebServerManager.cpp`): neues Fieldset "Werksreset" auf der
+Einstellungsseite mit Auswahlmenü (Alles/Konfiguration/Messwerte/Branding)
+und JS-Bestätigungsdialog (`confirmReset()`) - erstes `<script>`-Element
+in diesem Projekt überhaupt, da die Einstellungsseite bisher rein
+serverseitig gerendert wurde (keine AJAX-Formulare wie bei den
+Geschwisterprojekten). Dafür musste `graph_` in `WebServerManager` von
+`const GraphManager&` auf `GraphManager&` geändert werden (Konstruktor +
+Header + `main.cpp`-Instanziierung), da `reset()` mutierend ist.
+
+**Serial** (`main.cpp`): `status`, `dhcp`, `ip <ip> <maske> <gateway>`
+(kein DNS-Feld - `WlanManager` kennt keine separate DNS-Konfiguration),
+`wifi <ssid> <passwort>`, `reset`/`reset all`. Nur ein Netzwerk-Interface
+(WLAN, kein LAN) wie bei Sensormeter WLAN, daher ohne Interface-Argument
+bei `dhcp`/`ip` - anders als bei Sensormeter/Sensormeter PoE (LAN+WLAN).
+`status` hat kein "Zustand:"-Feld wie die Geschwisterprojekte (kein
+`SystemState`-Konzept in diesem Projekt), zeigt stattdessen WLAN-Status/IP/
+Signal (direkt über `WiFi.localIP()`/`WiFi.RSSI()`, da `WlanManager` dafür
+keine eigenen Getter hat) und den DHT11-Messwert.
+
+Version auf **`0.9.0-rc4`** angehoben (vorher `0.9.0-rc3`) - passend zum
+gemeinsamen Stand aller vier Sensormeter-Projekte, siehe "## Versionierung"
+weiter oben (dieses Projekt führte das SemVer-Schema für die Familie
+zuerst ein).
+
+Nur per `pio run` gebaut (kein Board für Sensormeter Display in dieser
+Sitzung angeschlossen), Build erfolgreich (Flash 80,7 %, RAM 27,8 %).
+Noch nicht auf echter Hardware verifiziert - anders als der übrige, bereits
+verifizierte Funktionsumfang dieses Projekts (siehe README, Abschnitt
+"Auf echter Hardware verifiziert").

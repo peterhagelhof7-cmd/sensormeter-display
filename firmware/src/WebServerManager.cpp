@@ -171,7 +171,7 @@ void buildLogoBmp(const uint8_t *rgb565, uint8_t *out) {
 WebServerManager::WebServerManager(SettingsManager &settings, BacklightManager &backlight, OtaManager &ota,
                                     WlanManager &wlan, const SensormeterManager &sensormeterManager,
                                     const SensorManager &sensor, const PingManager &pingManager,
-                                    const GraphManager &graph, BrandingManager &brandingManager)
+                                    GraphManager &graph, BrandingManager &brandingManager)
     : settings_(settings),
       backlight_(backlight),
       ota_(ota),
@@ -903,6 +903,34 @@ String WebServerManager::buildSettingsPage(bool saved) const {
 	html += "<a href=\"/settings/export\"><button type=\"button\">Konfiguration herunterladen</button></a>";
 	html += "</fieldset>";
 
+	// --- Werksreset (Umfangsauswahl, siehe docs/entscheidungen.md) ---
+	html += "<fieldset><legend>Werksreset</legend>";
+	html += "<form method=\"POST\" action=\"/factory-reset\" id=\"resetForm\" onsubmit=\"return confirmReset()\">";
+	html += "<label>Was zuruecksetzen?"
+	        "<select name=\"scope\" id=\"resetScope\">"
+	        "<option value=\"all\">Alles (Konfiguration + WLAN + Messwerte + Branding)</option>"
+	        "<option value=\"config\">Nur Konfiguration (Name, Web-Passwort, WLAN, Betriebsmodus, "
+	        "Sensormeter-/Ping-Ziele, Kalibrierung, Schwellwerte - Branding bleibt erhalten)</option>"
+	        "<option value=\"values\">Nur Messwerte (12h-DHT11-Verlauf)</option>"
+	        "<option value=\"branding\">Nur Anbieter-Branding (Name + Logo)</option>"
+	        "</select></label>";
+	html += "<button type=\"submit\">Werksreset durchfuehren</button></form>";
+	html += "<p class=\"hint\">Die Touch-Kalibrierung (Kalibrierpunkte des Bildschirms) ist von keinem Umfang "
+	        "betroffen - sie ist eine physische Geraetekalibrierung, kein Konfigurationswert.</p>";
+	html += "</fieldset>";
+
+	html += "<script>function confirmReset(){"
+	        "var s=document.getElementById('resetScope').value;"
+	        "var m={"
+	        "all:'Wirklich ALLES zuruecksetzen (Konfiguration, WLAN-Zugangsdaten, Messwerte UND Branding)? "
+	        "Das Geraet startet neu und muss ggf. per Onboarding neu ins WLAN eingebunden werden.',"
+	        "config:'Wirklich die Konfiguration zuruecksetzen (inkl. WLAN-Zugangsdaten, Web-Passwort, "
+	        "Kalibrierung, Schwellwerte)? Branding bleibt erhalten. Das Geraet startet neu.',"
+	        "values:'Wirklich den gespeicherten 12h-Verlauf loeschen? Das laesst sich nicht rueckgaengig machen.',"
+	        "branding:'Wirklich das Anbieter-Branding (Name + Logo) entfernen?'"
+	        "};"
+	        "return confirm(m[s]||'Wirklich zuruecksetzen?');}</script>";
+
 	html += "</div></body></html>";
 	return html;
 }
@@ -1105,6 +1133,48 @@ void WebServerManager::handleNetworkSave(AsyncWebServerRequest *request) {
 	ESP.restart();
 }
 
+void WebServerManager::handleFactoryReset(AsyncWebServerRequest *request) {
+	if (!checkAuth(request)) return;
+
+	String scope = request->hasParam("scope", true) ? request->getParam("scope", true)->value() : "all";
+
+	if (scope == "values") {
+		// Nur der 12h-DHT11-Verlauf - Settings/WLAN bleiben komplett unangetastet.
+		graph_.reset();
+		Serial.println("Werksreset: Messwerte (12h-Verlauf) geloescht");
+
+	} else if (scope == "config") {
+		// SettingsManager (Name, Web-Passwort, Betriebsmodus, Sensormeter-/
+		// Ping-Ziele samt Schwellwerten, DHT-Kalibrierung) UND WLAN-
+		// Zugangsdaten/statische IP zuruecksetzen, AUSSER brandingVendorName -
+		// Branding hat mit "branding" einen eigenen Reset-Umfang.
+		settings_.resetConfig(/*keepBrandingName=*/true);
+		wlan_.clearCredentials();
+		Serial.println("Werksreset: Konfiguration auf Standardwerte zurueckgesetzt (Branding erhalten)");
+
+	} else if (scope == "branding") {
+		// Nur Anbietername + Logo-Datei - alle uebrigen Einstellungen bleiben
+		// unangetastet.
+		settings_.setBrandingVendorName("");
+		brandingManager_.deleteLogo();
+		Serial.println("Werksreset: Anbieter-Branding entfernt");
+
+	} else {
+		// scope=="all" oder fehlender/unbekannter Wert - vollstaendiger Reset
+		// als sicherste Default-Annahme. Touch-Kalibrierung bleibt bewusst
+		// unangetastet (physische Geraetekalibrierung, siehe SettingsManager.h).
+		settings_.resetConfig(/*keepBrandingName=*/false);
+		wlan_.clearCredentials();
+		graph_.reset();
+		brandingManager_.deleteLogo();
+		Serial.println("Werksreset: Alles zurueckgesetzt (Konfiguration, WLAN, Messwerte, Branding)");
+	}
+
+	request->send(200, "text/plain", "Zurueckgesetzt, Geraet startet neu ...");
+	delay(500);
+	ESP.restart();
+}
+
 void WebServerManager::handleOtaUploadChunk(AsyncWebServerRequest *request, const String &filename,
                                              size_t index, uint8_t *data, size_t len, bool final) {
 	if (!checkAuth(request)) return;
@@ -1215,6 +1285,7 @@ void WebServerManager::begin() {
 	server_.on("/ping/threshold", HTTP_POST,
 	           [this](AsyncWebServerRequest *request) { handlePingThreshold(request); });
 	server_.on("/network/save", HTTP_POST, [this](AsyncWebServerRequest *request) { handleNetworkSave(request); });
+	server_.on("/factory-reset", HTTP_POST, [this](AsyncWebServerRequest *request) { handleFactoryReset(request); });
 
 	server_.on(
 	    "/ota/upload", HTTP_POST, [this](AsyncWebServerRequest *request) { handleOtaUploadComplete(request); },

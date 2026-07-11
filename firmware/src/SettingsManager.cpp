@@ -418,6 +418,51 @@ void SettingsManager::setBrandingVendorName(const String &name) {
 	xSemaphoreGive(mutex_);
 }
 
+void SettingsManager::resetConfig(bool keepBrandingName) {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	String keptBrandName = keepBrandingName ? brandingVendorName_ : String();
+
+	prefs.begin("settings", false);
+	prefs.clear();
+	prefs.end();
+
+	// In-Memory-Zustand ebenfalls auf die eingebauten Defaults zuruecksetzen
+	// (nicht nur NVS) - fuer den Fall, dass der Aufrufer nicht sofort neu
+	// startet.
+	mode_ = OperatingMode::Slide;
+	slideIntervalSec_ = kSlideIntervalDefaultSec;
+	staticSource_ = DataSource::Dht11;
+	brightnessPercent_ = kBrightnessDefaultPercent;
+	sensormeterCommunity_ = "public";
+	for (size_t i = 0; i < kMaxSensormeterTargets; i++) sensormeterTargets_[i] = String();
+	sensormeterTargetCount_ = 0;
+	for (size_t i = 0; i < kMaxPingTargets; i++) pingTargets_[i] = String();
+	pingTargetCount_ = 0;
+	deviceName_ = "Sensormeter Display";
+	webPassword_ = "admin";
+	brandingVendorName_ = keptBrandName;
+	dhtTempOffsetC_ = 0;
+	dhtHumOffsetPct_ = 0;
+	dhtOffsetSetTs_ = 0;
+	dhtTempMinC_ = kThresholdDisabled;
+	dhtTempMaxC_ = kThresholdDisabled;
+	dhtHumMinPct_ = kThresholdDisabled;
+	dhtHumMaxPct_ = kThresholdDisabled;
+	for (size_t i = 0; i < kMaxSensormeterTargets; i++) {
+		for (uint8_t s = 0; s < kMaxSensorsPerTarget; s++) {
+			smTempMin_[i][s] = kThresholdDisabled;
+			smTempMax_[i][s] = kThresholdDisabled;
+			smHumMin_[i][s] = kThresholdDisabled;
+			smHumMax_[i][s] = kThresholdDisabled;
+		}
+	}
+	for (size_t i = 0; i < kMaxPingTargets; i++) pingMaxMs_[i] = 0;
+	googlePingMaxMs_ = 0;
+
+	save();
+	xSemaphoreGive(mutex_);
+}
+
 int16_t SettingsManager::dhtTempMinC() const {
 	xSemaphoreTake(mutex_, portMAX_DELAY);
 	int16_t v = dhtTempMinC_;

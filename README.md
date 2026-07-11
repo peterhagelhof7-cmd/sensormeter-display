@@ -54,7 +54,7 @@ Hardware-Alternative (ESP32-S3/Heemol) wurden bewusst **nicht** übernommen.
 
 `firmware/` ist ein PlatformIO-Projekt (Board `esp32dev`, Framework Arduino).
 
-**Version:** `0.9.0-rc3` (Beta) — Versionsschema siehe
+**Version:** `0.9.0-rc4` (Beta) — Versionsschema siehe
 [docs/entscheidungen.md](docs/entscheidungen.md#versionierung).
 
 Aktueller Stand: **P0–P8 vollständig** (siehe
@@ -131,11 +131,20 @@ Enthalten (P0–P8):
   Auslieferung als on-the-fly synthetisierter 24-Bit-BMP (kein PNG/JPEG-
   Decoder) — Konzept von Sensormeter WLAN übernommen, siehe
   `docs/entscheidungen.md`
+- Werksreset über die Einstellungsseite mit wählbarem Umfang (Alles / nur
+  Konfiguration / nur Messwerte / nur Anbieter-Branding); Touch-Kalibrierung
+  bleibt davon unberührt (physische Geräte-/Bildschirmkalibrierung)
+- Serial-Kommandozeile über USB (`dhcp`, `ip`, `wifi`, `status`,
+  `reset[ all]`) für Zugriff ohne funktionierendes Netzwerk — ohne
+  `dump`/`upload` (kein XML-Konfigurationsdokument wie bei den
+  Geschwisterprojekten, Einstellungen liegen einzeln in NVS/Preferences),
+  siehe `docs/admin-guide.html`
 
 Auf echter Hardware verifiziert (wiederholt geflasht und getestet,
 siehe `docs/entscheidungen.md` für die dabei gefundenen und behobenen
-Bugs) — **Ausnahme: Anbieter-Branding** wurde mangels angeschlossenem
-Board nur per `pio run` gebaut, noch nicht geflasht/getestet.
+Bugs) — **Ausnahme: Anbieter-Branding sowie Werksreset-Umfangsauswahl und
+Serial-Kommandozeile** wurden mangels angeschlossenem Board nur per
+`pio run` gebaut, noch nicht geflasht/getestet.
 
 **Auf einem anderen/frischen Windows-PC**: [`scripts/flash.ps1`](scripts/flash.ps1)
 (oder `.cmd` zum Doppelklicken) fragt zuerst, welches der vier

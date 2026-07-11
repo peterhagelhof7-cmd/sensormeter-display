@@ -48,6 +48,10 @@ public:
 	int16_t entryTempC(size_t i) const;
 	int16_t entryHumidityPct(size_t i) const;
 
+	// Werksreset "Nur Messwerte" (siehe WebServerManager/main.cpp
+	// Serial-Kommandozeile): leert den Ringpuffer und loescht history.csv.
+	void reset();
+
 private:
 	struct Entry {
 		time_t ts;

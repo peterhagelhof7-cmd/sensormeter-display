@@ -113,6 +113,12 @@ void WlanManager::clearStaticIp() {
 	prefs.end();
 }
 
+void WlanManager::clearCredentials() {
+	prefs.begin("wifi", false);
+	prefs.clear();
+	prefs.end();
+}
+
 bool WlanManager::connect(const String &ssid, const String &psk, uint32_t timeoutMs) {
 	WiFi.disconnect();
 	delay(100);

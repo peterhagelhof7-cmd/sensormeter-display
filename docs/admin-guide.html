@@ -152,7 +152,7 @@
   </div>
   <div class="subtitle">Admin-Guide — Inbetriebnahme, Touch-Bedienung und Konfiguration über die Weboberfläche</div>
   <div class="badges">
-    <span class="badge badge-orange">v0.9.0-rc3 · Beta</span>
+    <span class="badge badge-orange">v0.9.0-rc4 · Beta</span>
     <span class="badge">HW-458B · ESP32</span>
     <span class="badge">Touch-UI · Webserver · Branding · OTA</span>
     <span class="badge">github.com/peterhagelhof7-cmd/sensormeter-display</span>
@@ -168,6 +168,7 @@
   <div class="toc-row"><a href="#sec6">6. Info-Dialog</a></div>
   <div class="toc-row"><a href="#sec7">7. Konfiguration über die Weboberfläche</a></div>
   <div class="toc-row"><a href="#sec8">8. Firmware-Updates</a></div>
+  <div class="toc-row"><a href="#sec9">9. Serial-Kommandozeile (USB)</a></div>
   <div class="toc-row"><a href="#sec-anhang">Anhang: Troubleshooting</a></div>
 </div>
 
@@ -662,7 +663,7 @@ abzulesen (z. B. um das Webinterface aufzurufen).</p>
     <div style="position:absolute; top:31.5mm; left:2mm; font-size:2.4mm; color:#555;">Verbindungsart:</div>
     <div style="position:absolute; top:35.55mm; left:2mm; font-size:3.6mm; font-weight:700;">DHCP (automatisch)</div>
     <div style="position:absolute; top:41.85mm; left:2mm; font-size:2.4mm; color:#555;">Firmware:</div>
-    <div style="position:absolute; top:45.9mm; left:2mm; font-size:3.6mm; font-weight:700;">0.9.0-rc3</div>
+    <div style="position:absolute; top:45.9mm; left:2mm; font-size:3.6mm; font-weight:700;">0.9.0-rc4</div>
   </div></div>
   <div class="sketch-notes">
     <ul>
@@ -786,6 +787,32 @@ Neustart.</p>
 <h3>Firmware-Update</h3>
 <p>Siehe Abschnitt 8.</p>
 
+<h3>Werksreset</h3>
+<p>Ein Auswahlmenü legt fest, welcher Umfang zurückgesetzt wird, bevor der
+Button „Werksreset durchführen" ausgelöst wird (Bestätigungsdialog nennt
+den gewählten Umfang noch einmal):</p>
+<div class="keep">
+<table>
+  <tr><th>Umfang</th><th>Wirkung</th></tr>
+  <tr><td>Alles</td><td>Setzt Systemname, Web-Passwort, Betriebsmodus, Sensormeter-/Ping-Ziele samt Schwellwerten und DHT11-Kalibrierung auf Werkswerte zurück, löscht die gespeicherten WLAN-Zugangsdaten (Gerät startet danach im Onboarding, Abschnitt 2.2), löscht den 12h-Verlauf <b>und</b> das Anbieter-Logo. Nicht rückgängig zu machen.</td></tr>
+  <tr><td>Nur Konfiguration</td><td>Wie oben (inkl. WLAN-Zugangsdaten), aber ohne den 12h-Verlauf und ohne Branding zu löschen — der Anbietername bleibt erhalten, das Logo ebenfalls.</td></tr>
+  <tr><td>Nur Messwerte</td><td>Löscht ausschließlich den 12h-DHT11-Verlauf. Konfiguration, WLAN und Branding bleiben vollständig unangetastet.</td></tr>
+  <tr><td>Nur Anbieter-Branding</td><td>Setzt nur den Anbietername zurück und entfernt ein hinterlegtes Logo (identisch zum Logo-Löschen-Button, Abschnitt 7.5). Alle übrigen Einstellungen bleiben unangetastet.</td></tr>
+</table>
+<p style="font-size:11px; color:#6b6559;">Die Touch-Kalibrierung (Abschnitt
+2.1) ist von <b>keinem</b> Umfang betroffen — sie ist eine physische
+Geräte-/Bildschirmkalibrierung, kein Konfigurationswert. Zum erneuten
+Kalibrieren siehe Anhang, „Touch reagiert ungenau".</p>
+<p style="font-size:11px; color:#6b6559;">Anders als bei den drei
+OLED-Geschwisterprojekten gibt es hier <b>kein</b> XML-Konfigurationsdokument
+(Einstellungen liegen einzeln in NVS/Preferences) — daher auch kein
+Wiederherstellen aus einer zuvor heruntergeladenen Sicherung, nur der reine
+Reset. Bei fehlendem Netzwerkzugriff lässt sich derselbe Werksreset auch
+per USB über die Serial-Kommandozeile auslösen (Abschnitt 9, Kommandos
+<span class="code">reset</span>/<span class="code">reset all</span>, dort
+ohne die granulare Umfangsauswahl der Weboberfläche).</p>
+</div>
+
 <h2>7.4 Live-Status-Dashboard (öffentlich, ohne Login)</h2>
 <p>Die Startseite <span class="code">http://&lt;IP-Adresse&gt;/</span>
 selbst ist bewusst <b>nicht</b> passwortgeschützt (im Unterschied zur
@@ -832,7 +859,7 @@ im Kopfbereich von Dashboard <b>und</b> Einstellungsseite.</p>
 <p>Zwei Wege, eine neue Firmware-Version einzuspielen:</p>
 <h2>8.1 Lokales OTA-Update über das Webinterface</h2>
 <p>Der Bereich „Firmware-Update“ zeigt zuerst die aktuell installierte
-Version (<span class="code">Aktuell installiert: 0.9.0-rc3</span>) — auch
+Version (<span class="code">Aktuell installiert: 0.9.0-rc4</span>) — auch
 im Info-Dialog am Gerät sichtbar (Abschnitt 6).</p>
 <ol>
   <li>Neue <span class="code">.bin</span>-Datei besorgen (z. B. von den
@@ -848,6 +875,90 @@ pull</span>, sofern keine lokalen Änderungen vorliegen) und flasht per
 USB-Kabel neu.</p>
 
 <!-- ============================================================ -->
+<h1 class="section" id="sec9"><span class="num">9</span>Serial-Kommandozeile (USB)</h1>
+<p>Zusätzlich zur Weboberfläche lässt sich das Gerät direkt über die
+USB-Verbindung steuern — ohne Netzwerkzugriff, ohne Passwort. Praktisch,
+wenn das Gerät nur per USB, aber nicht per Netzwerk erreichbar ist (z. B.
+falsche WLAN-Zugangsdaten, statische IP in einem fremden Netzsegment).
+Baudrate 115200, jede Zeile mit Enter abschließen.</p>
+
+<div class="callout">
+  <div class="callout-title">Gleiches Vertrauensmodell wie bei den Geschwisterprojekten</div>
+  Wer das Gerät per USB-Kabel anschließen kann, gilt als vertrauenswürdig —
+  kein Passwort nötig. Alle Kommandos außer <span class="code">reset</span>/<span class="code">reset all</span>
+  sind nicht destruktiv.
+</div>
+
+<h2>9.1 Kommandoübersicht</h2>
+<p>Anders als bei Sensormeter/Sensormeter WLAN/Sensormeter PoE gibt es hier
+kein <span class="code">dump</span>/<span class="code">upload</span> — die
+Einstellungen liegen einzeln in NVS/Preferences statt in einem
+XML-Konfigurationsdokument, siehe Abschnitt 7.3 „Werksreset".</p>
+<table>
+  <tr><th>Kommando</th><th>Wirkung</th></tr>
+  <tr><td><span class="code">status</span></td><td>Aktuellen Zustand ausgeben (WLAN-Status, IP, Signal, DHT11-Messwert, freier Heap, Laufzeit) — rein lesend, kein Neustart</td></tr>
+  <tr><td><span class="code">dhcp</span></td><td>WLAN auf DHCP umstellen, statische IP/Maske/Gateway löschen, Gerät startet neu</td></tr>
+  <tr><td><span class="code">ip &lt;adresse&gt; &lt;maske&gt; &lt;gateway&gt;</span></td><td>Statische IP setzen, Gerät startet neu. Anders als die Einstellungsseite ohne Ping-Kollisionsprüfung — bewusst einfach gehalten. Kein DNS-Feld (WlanManager kennt keine separate DNS-Konfiguration)</td></tr>
+  <tr><td><span class="code">wifi &lt;ssid&gt; &lt;passwort&gt;</span></td><td>Neue WLAN-Zugangsdaten setzen, Gerät startet neu und verbindet sich damit (wie das Onboarding, Abschnitt 2.2)</td></tr>
+  <tr><td><span class="code">reset</span></td><td>Werksreset nur der Konfiguration (wie Umfang „Nur Konfiguration" auf der Einstellungsseite, inkl. WLAN-Zugangsdaten, allerdings ohne dessen Branding-Erhalt — der Anbietername wird mit zurückgesetzt), Gerät startet neu — der 12h-Verlauf bleibt erhalten</td></tr>
+  <tr><td><span class="code">reset all</span></td><td>Wie oben, zusätzlich werden der 12h-Verlauf und das Anbieter-Logo gelöscht. Nicht rückgängig zu machen</td></tr>
+</table>
+<p class="hint">Die Touch-Kalibrierung ist von keinem der beiden
+Reset-Kommandos betroffen (physische Geräte-/Bildschirmkalibrierung, kein
+Konfigurationswert) — siehe Abschnitt 7.3.</p>
+
+<h2>9.2 Nutzung mit Windows-Boardmitteln (ohne Zusatzsoftware)</h2>
+<p>Für einen seriellen Terminal wird üblicherweise ein Zusatzprogramm wie
+PuTTY oder Tera Term verwendet — beides funktioniert, ist aber nicht
+vorinstalliert. Windows bringt mit der <span class="code">.NET</span>-Klasse
+<span class="code">System.IO.Ports.SerialPort</span> bereits alles Nötige
+mit; PowerShell (ab Windows 7 vorinstalliert) reicht für eine vollständige
+interaktive Sitzung, ganz ohne Download.</p>
+
+<h3>COM-Port ermitteln</h3>
+<p>Geräte-Manager öffnen (<span class="code">Win+X</span> →
+Geräte-Manager) → „Anschlüsse (COM &amp; LPT)" — der Port erscheint dort
+als „USB-SERIAL CH340 (COM&lt;n&gt;)" o. ä. (siehe auch Abschnitt 1.2).
+Alternativ per PowerShell auflisten:</p>
+<pre class="code-block">[System.IO.Ports.SerialPort]::GetPortNames()</pre>
+
+<h3>Interaktive Sitzung (empfohlen)</h3>
+<p>Folgendes Skript als <span class="code">.ps1</span>-Datei speichern
+(<span class="code">COM5</span> durch den tatsächlichen Port ersetzen) und
+mit <span class="code">powershell -ExecutionPolicy Bypass -File
+.\seriell.ps1</span> ausführen, oder direkt zeilenweise in ein
+PowerShell-Fenster einfügen:</p>
+<pre class="code-block">$port = New-Object System.IO.Ports.SerialPort "COM5", 115200, "None", 8, "One"
+$port.NewLine = "`n"
+$port.Open()
+Write-Host "Verbunden mit $($port.PortName). Kommando eingeben und Enter druecken."
+Write-Host "Zum Beenden 'exit' eingeben."
+while ($true) {
+    Start-Sleep -Milliseconds 200
+    while ($port.BytesToRead -gt 0) {
+        try { Write-Host $port.ReadLine() } catch {}
+    }
+    $cmd = Read-Host
+    if ($cmd -eq "exit") { break }
+    $port.WriteLine($cmd)
+}
+$port.Close()</pre>
+<p>Das Skript öffnet den Port, gibt eingehende Zeilen laufend aus und
+sendet jede Eingabe als eigenes Kommando — genau wie ein grafisches
+Terminalprogramm, nur ganz ohne Installation.</p>
+
+<h3>Einzelnes Kommando (Kurzform)</h3>
+<p>Für einen schnellen einmaligen Aufruf, z. B. nur den Status abfragen,
+genügt auch ein Einzeiler ohne Schleife:</p>
+<pre class="code-block">$port = New-Object System.IO.Ports.SerialPort "COM5", 115200
+$port.Open(); Start-Sleep -Seconds 6   # Boot-Log abwarten
+$port.DiscardInBuffer()
+$port.WriteLine("status")
+Start-Sleep -Milliseconds 500
+$port.ReadExisting()
+$port.Close()</pre>
+
+<!-- ============================================================ -->
 <h1 class="section" id="sec-anhang">Anhang — Troubleshooting</h1>
 <table>
   <tr><th>Problem</th><th>Mögliche Ursache / Lösung</th></tr>
@@ -857,7 +968,7 @@ USB-Kabel neu.</p>
   <tr><td>WLAN-Symbol blinkt dauerhaft</td><td>Kein WLAN verbunden — über Systemeinstellungen → WLAN neu wählen erneut einrichten</td></tr>
   <tr><td>Bildschirm bleibt komplett rot</td><td>Ping zu google.com schlägt seit über 1 Minute fehl — Internetverbindung/Router prüfen</td></tr>
   <tr><td>Webinterface nicht erreichbar</td><td>IP-Adresse über den Info-Dialog am Gerät prüfen; bei kürzlich geänderter Static-IP ggf. neue Adresse verwenden</td></tr>
-  <tr><td>Web-Login schlägt fehl</td><td>Benutzername immer „admin“; Passwort wurde ggf. bereits geändert (siehe Abschnitt 7.1) — bei Passwortverlust hilft nur ein vollständiger Flash-Löschvorgang (setzt alle Einstellungen zurück)</td></tr>
+  <tr><td>Web-Login schlägt fehl / Gerät im Netzwerk gar nicht erreichbar</td><td>Benutzername immer „admin“; Passwort wurde ggf. bereits geändert (siehe Abschnitt 7.1) — bei Passwortverlust hilft ein Werksreset mit Umfang „Nur Konfiguration“ oder „Alles“ auf der Einstellungsseite (Abschnitt 7.3), oder per USB das <span class="code">reset</span>-Kommando über die Serial-Kommandozeile (Abschnitt 9)</td></tr>
   <tr><td>Neue Netzwerkeinstellungen werden abgelehnt</td><td>Bei „Statisch“: ein anderes Gerät im Netz antwortet bereits unter dieser Adresse (Abschnitt 7.4) — andere, freie Adresse wählen. Bei „Automatisch (DHCP)“: kein DHCP-Server im Netz gefunden — Router prüfen oder stattdessen eine statische IP eintragen</td></tr>
 </table>
 

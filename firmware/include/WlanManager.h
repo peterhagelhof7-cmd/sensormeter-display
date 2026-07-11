@@ -37,6 +37,12 @@ public:
 	void saveStaticIp(const IPAddress &ip, const IPAddress &gateway, const IPAddress &subnet);
 	void clearStaticIp();
 
+	// Werksreset "Konfiguration"/"Alles" (siehe WebServerManager/main.cpp
+	// Serial-Kommandozeile): loescht SSID/PSK UND die statische IP - der
+	// komplette NVS-Namespace "wifi" wird geleert, ein Neustart landet danach
+	// wieder im Onboarding (siehe main.cpp).
+	void clearCredentials();
+
 	// Verbindet mit den uebergebenen Zugangsdaten, blockierend bis
 	// verbunden oder Timeout. Speichert bei Erfolg NICHT automatisch
 	// (das entscheidet der Aufrufer, siehe WifiOnboarding).

@@ -108,6 +108,15 @@ int16_t GraphManager::entryTempC(size_t i) const {
 	return v;
 }
 
+void GraphManager::reset() {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	count = 0;
+	lastRecordTs = 0;
+	LittleFS.remove(kHistoryFile);
+	everDrawn = false; // erzwingt Neuzeichnen mit leerem Verlauf
+	xSemaphoreGive(mutex_);
+}
+
 int16_t GraphManager::entryHumidityPct(size_t i) const {
 	xSemaphoreTake(mutex_, portMAX_DELAY);
 	int16_t v = (i < count) ? entries[i].humidityPct : 0;

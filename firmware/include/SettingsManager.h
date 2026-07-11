@@ -108,6 +108,18 @@ public:
 	String brandingVendorName() const;
 	void setBrandingVendorName(const String &name);
 
+	// Werksreset "Konfiguration"/"Alles" (siehe WebServerManager/main.cpp
+	// Serial-Kommandozeile): leert den kompletten NVS-Namespace "settings"
+	// (Betriebsmodus, Helligkeit, Sensormeter-/Ping-Ziele samt
+	// Schwellwerten, DHT-Kalibrierung, Geraetename, Web-Passwort) und laedt
+	// anschliessend die eingebauten Defaults neu. keepBrandingName: true
+	// beim Umfang "Konfiguration" (Branding hat dort einen eigenen
+	// Reset-Umfang), false beim Umfang "Alles". Ruehrt NICHT an
+	// WlanManager (siehe dortiges clearCredentials()), GraphManager (siehe
+	// reset()) oder der Touch-Kalibrierung (physische Hardware-Kalibrierung,
+	// kein Konfigurationswert) - der Aufrufer kombiniert das je nach Umfang.
+	void resetConfig(bool keepBrandingName);
+
 	// Warnschwellwerte (nur ueber den Webserver einstellbar, siehe
 	// docs/entscheidungen.md): bei Ueber-/Unterschreitung faerbt main.cpp den
 	// gesamten Bildschirm rot - derselbe Mechanismus wie der bestehende
