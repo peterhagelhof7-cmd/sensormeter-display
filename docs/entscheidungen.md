@@ -1478,3 +1478,39 @@ korrekter Info-Text. Zusätzlich Screenshot (`--screenshot`,
 4-Baugruppen-Layouts angefertigt - keine Überlappungen, alle vier Module
 und alle 18 Drahtlinien sauber lesbar. Kein Board nötig, rein
 clientseitiges HTML/JS ohne Firmware-Bezug.
+
+## Verdrahtungsplan auf DHT11-Draht reduziert, offizielles Produktbild als Quelle ergänzt
+
+Nutzer wies auf ein offizielles Verkäufer-Produktbild der HW-458B-Platine
+hin (in `docs/hw-458b-pinout-datenblatt.jpg` übernommen) und bat darum, im
+interaktiven Verdrahtungsplan nur noch den DHT11-Anschluss als Drähte zu
+zeichnen - TFT, Touch und RGB-LED sind ja bereits vorhanden (onboard),
+dafür keine eigene "Verkabelung" im Sinne des Schemas nötig.
+
+**Schema reduziert**: von 18 auf 3 Drähte (3.3V→DHT11 VCC, GND→DHT11 GND,
+IO22→DHT11 DATA). Die vollständige Pinbelegung aller Baugruppen bleibt in
+der Tabelle "Pinbelegung" erhalten (reine Referenz, keine Drähte mehr) -
+nur das interaktive SVG-Schema selbst zeigt jetzt ausschließlich die eine
+tatsächliche Handverkabelung.
+
+**Produktbild als zusätzliche Quelle**: das Bild bestätigt direkt (nicht
+nur über ein ähnliches Referenzdesign) Touch-Pins (IO25/33/32/39/36),
+Backlight (IO21), RGB-LED (IO17/4/16), Audio (IO26), Lichtsensor/
+Fotowiderstand (IO34), SD-Kartenslot (CD/DAT3=IO5, CMD=IO23, CLK=IO18,
+DATA0=IO19) sowie den Erweiterungsanschluss "IO2" (GND/IO22/IO27/3.3V,
+exakt wie in `pins.h` dokumentiert) - alles deckungsgleich mit den
+bisherigen Annahmen, keine Korrektur nötig. Einzige Ausnahme: die
+TFT-SPI-Pins (MOSI/MISO/SCLK/CS/DC) sind auf dem Bild nicht abgebildet
+(nur "Touchscreen chip" beschriftet, nicht der TFT-Treiber) - dafür gilt
+weiterhin nur die schwächere Bestätigung über das Referenzdesign LCDWIKI
+E32R28T/E32N28T. `firmware/include/pins.h` und
+`docs/verdrahtungsplan.html` entsprechend präzisiert (welche Pin-Gruppe
+über welche Quelle bestätigt ist).
+
+Bild unter `docs/hw-458b-pinout-datenblatt.jpg` ins Repo übernommen und im
+Verdrahtungsplan als `<figure>` mit Quellenangabe eingebunden.
+
+Getestet mit Headless Chrome (`--dump-dom` + synthetischer Klick auf Draht
+`w3`, IO22→DHT11 DATA): korrektes Hervorheben (1 aktiv, 2 gedimmt).
+Zusätzlich Screenshot zur visuellen Kontrolle des vereinfachten Schemas
+sowie des eingebetteten Produktbilds - beides sauber ohne Layoutfehler.

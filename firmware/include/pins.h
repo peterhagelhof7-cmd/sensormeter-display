@@ -2,13 +2,20 @@
 
 // Pinbelegung HW-458B (ESP-WROOM-32 + ST7789P3 2,8" 240x320)
 //
-// TFT- und Touch-Pins sind NICHT im Hersteller-Datenblatt aufgefuehrt
-// (CBAA0055-008_DE.pdf listet nur die Touch-Pins). Sie wurden ueber das
-// identische Referenzdesign LCDWIKI E32R28T/E32N28T (2.8inch_ESP32-32E-7789)
+// Touch-, RGB-LED-, Audio-, Lichtsensor- und SD-Slot-Pins sind direkt durch
+// das offizielle Verkaeufer-Produktbild bestaetigt (siehe
+// docs/hw-458b-pinout-datenblatt.jpg / docs/verdrahtungsplan.html) - nicht
+// nur ueber ein aehnliches Referenzdesign hergeleitet.
+//
+// TFT-SPI-Pins (MOSI/MISO/SCLK/CS/DC) stehen dort NICHT drin (das Bild
+// zeigt nur "Touchscreen chip"-Pins, nicht die TFT-Treiber-Pins) und auch
+// nicht im Hersteller-Datenblatt (CBAA0055-008_DE.pdf listet ebenfalls nur
+// die Touch-Pins). Sie wurden stattdessen ueber das identische
+// Referenzdesign LCDWIKI E32R28T/E32N28T (2.8inch_ESP32-32E-7789)
 // bestaetigt: dessen Touch-Pinbelegung (IO25/32/33/36/39) und Backlight-Pin
-// (IO21) stimmen exakt mit dem Datenblatt dieses Boards ueberein - siehe
+// (IO21) stimmen exakt mit dem Produktbild dieses Boards ueberein - siehe
 // docs/entscheidungen.md. TFT-Pins gelten daher als sehr wahrscheinlich,
-// aber nicht am eigenen Board nachgemessen.
+// aber nicht direkt bestaetigt und nicht am eigenen Board nachgemessen.
 
 // --- TFT (ST7789P3, 4-Draht-SPI) ---
 // TFT_MOSI/MISO/SCLK/CS/DC/RST/BL werden zentral in platformio.ini als
