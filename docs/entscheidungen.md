@@ -1616,3 +1616,43 @@ Sitzung angeschlossen), Build erfolgreich (Flash 80,7 %, RAM 27,8 %).
 Noch nicht auf echter Hardware verifiziert - anders als der übrige, bereits
 verifizierte Funktionsumfang dieses Projekts (siehe README, Abschnitt
 "Auf echter Hardware verifiziert").
+
+## Familien-Standardlogo automatisch provisioniert, außer eigenes Logo bereits vorhanden
+
+Analog zu Sensormeter WLAN (dort zuerst umgesetzt und auf echter Hardware
+verifiziert, siehe dessen `entscheidungen.md`): das Standard-Branding-Logo
+(Tri-Orbit + Dial Mark, siehe sensormeter-family) musste bisher nach jedem
+Flash manuell über die Einstellungsseite hochgeladen werden. Jetzt
+automatisch: `BrandingManager::begin()` prüft zuerst `checkLogoOnDisk()`
+wie bisher, ruft bei fehlendem Logo aber zusätzlich neu
+`provisionDefaultLogo()` auf, das das in `DefaultLogo.h` eingebettete
+Rohbild (128×64, RGB565, 2 Byte/Pixel, exakt 16.384 Byte) einmalig auf
+LittleFS schreibt - Tmp-Datei-plus-Umbenennen-Muster wie beim regulären
+Web-Upload.
+
+**Genau das erwartete Verhalten, kein Entweder-Oder:** Ist bereits ein
+Logo vorhanden (eigenes hochgeladenes ODER schon einmal automatisch
+provisioniertes), bleibt es unangetastet - `provisionDefaultLogo()` wird
+dann gar nicht erst aufgerufen. Ein Kunden-eigenes Logo wird also nie
+überschrieben, auch nicht bei einem erneuten Firmware-Flash (ein normaler
+`pio run --target upload` rührt die LittleFS-Datenpartition ohnehin nicht
+an). Der Anbietername selbst (in `SettingsManager`/NVS, unabhängig vom
+Logo) ist von dieser Automatik nicht betroffen - bleibt weiterhin leer,
+bis er manuell gesetzt wird.
+
+`DefaultLogo.h` liegt im Repo (kein Klartext-Geheimnis, nur Bilddaten) und
+wird aus der vorkonvertierten Datei in `sensormeter-family/logo/` generiert
+- bei einem neuen Default-Logo einfach neu konvertieren und den
+Array-Inhalt ersetzen, nicht von Hand editieren.
+
+Gilt hier derselbe TFT-Farbkanal-Vorbehalt wie beim manuellen Logo-Upload
+(Abschnitt 7.5 im Admin-Guide): das eingebettete Default-Logo ist in
+Standard-RGB565 gepackt, nicht vorkompensiert für die BGR-Panel-Einstellung
+dieses Boards - auf echter Hardware könnte es daher farblich vertauscht
+erscheinen (Rot/Blau), bis das durch einen Hardware-Test bestätigt oder
+widerlegt ist.
+
+Nur per `pio run` gebaut (kein Board für Sensormeter Display in dieser
+Sitzung angeschlossen) - beide Zweige (Logo fehlt → automatisch schreiben;
+Logo vorhanden → nichts tun) nur per Code-Review verifiziert, nicht auf
+echter Hardware getestet.
