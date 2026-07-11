@@ -1429,3 +1429,52 @@ hier zwei permanente statische Puffer für die Web-BMP-Auslieferung nötig
 sind (siehe oben) - bei 327.680 B Gesamt-RAM bleiben trotzdem knapp 237 KB
 (72 %) frei, unkritisch. Nicht geflasht - kein Board in dieser Session
 angeschlossen.
+
+## Verdrahtungsplan interaktiv: docs/verdrahtungsplan.html neu angelegt
+
+Auf Anfrage, familienweit für alle vier Projekte. Im Unterschied zu den
+drei Geschwisterprojekten gab es hier bisher **gar keinen**
+Verdrahtungsplan (weder PDF noch HTML) - nur die Pin-Zuordnungen verstreut
+in `firmware/include/pins.h` und `docs/entscheidungen.md`.
+
+Besonderheit dieses Projekts: HW-458B ist ein integriertes Board (ESP-
+WROOM-32 + ST7789P3-TFT + resistiver Touch bereits auf einer Platine
+verlötet) - TFT- und Touch-Pins sind also feste PCB-Leiterbahnen, keine
+vom Nutzer gesteckten Jumper-Kabel. Tatsächlich extern verkabelt wird nur
+der DHT11-Sensor über den 4-poligen Erweiterungsanschluss "IO2". Die RGB-
+Status-LED gilt laut Datenblatt ebenfalls als onboard.
+
+Entscheidung: trotzdem alle vier Baugruppen (TFT, Touch, DHT11, RGB-LED)
+als anklickbare Drähte im selben Schema zeigen, aber farblich/mit Rahmen
+und Beschriftung klar zwischen "onboard, fest verdrahtet" (TFT blau, Touch
+grün, RGB-LED lila umrandet) und "extern, tatsächlich zu verkabeln" (DHT11
+orange umrandet) unterscheiden - liefert denselben Nachschlage-Nutzen
+("welcher GPIO geht wohin") unabhängig davon, ob es sich um eine
+Platinenleiterbahn oder ein Kabel handelt, ohne den Eindruck zu erwecken,
+TFT/Touch müssten verkabelt werden. Zusätzlicher Callout-Absatz "Onboard
+vs. extern" stellt das noch einmal explizit klar.
+
+18 Drähte insgesamt (mehr als bei den Geschwisterprojekten mit 7-15, da
+vier statt zwei-drei Baugruppen): 3V3→DHT11 VCC, GND→DHT11 GND, GND→RGB-
+LED GND, sechs TFT-Signale (MOSI/MISO/SCLK/CS/DC/BL), fünf Touch-Signale
+(CLK/CS/DIN/OUT/IRQ), DHT11 DATA, drei RGB-LED-Kanäle (R/G/B). `TFT_RST`
+(-1, an EN gebunden) erscheint bewusst nicht als eigener Draht - kein
+echter GPIO. Gleiches Interaktionsmuster wie bei den drei anderen
+Projekten übernommen (Inline-SVG, unsichtbarer breiterer Hit-Pfad je
+Draht, Info-Zeile "Von → Nach", Klick zum Ab-/Auswählen).
+
+Pinbelegung 1:1 aus `firmware/include/pins.h` übernommen (bereits dort mit
+Herkunftsnachweis dokumentiert: TFT/Touch-Pins über das baugleiche
+Referenzdesign LCDWIKI E32R28T/E32N28T bestätigt, nicht am eigenen Board
+nachgemessen) - keine neuen Zuordnungen erfunden. Ungenutzte, laut
+Datenblatt aber vorhandene Pins (Audio, Lichtsensor, SD-Karte) als reine
+Text-Auflistung am Ende ergänzt, nicht als Drähte (analog zu den
+"Vermiedene Pins"-Abschnitten der Geschwisterprojekte).
+
+Getestet mit Headless Chrome (`--dump-dom` + synthetischer Klick auf Draht
+`w12`, IO32→Touch DIN): korrektes Hervorheben (1 aktiv, 17 gedimmt),
+korrekter Info-Text. Zusätzlich Screenshot (`--screenshot`,
+900×2600-Fenster) zur visuellen Kontrolle des neuen, deutlich dichteren
+4-Baugruppen-Layouts angefertigt - keine Überlappungen, alle vier Module
+und alle 18 Drahtlinien sauber lesbar. Kein Board nötig, rein
+clientseitiges HTML/JS ohne Firmware-Bezug.

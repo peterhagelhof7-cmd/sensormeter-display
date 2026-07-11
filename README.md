@@ -28,6 +28,7 @@ Warnschwellwerte, DHT11-Kalibrierkorrektur) inkl. lokalem OTA-Update per
 | [docs/projektfamilie.html](docs/projektfamilie.html) | Architekturskizze: wie die drei Sensormeter-Projekte zusammenhängen |
 | [docs/lastenheft.txt](docs/lastenheft.txt) | Fachliche Anforderungen: Hardware, GUI, Betriebsarten, Datenquellen, Fehlerbehandlung, Webserver-Nachtrag |
 | [docs/pflichtenheft.txt](docs/pflichtenheft.txt) | Technische Umsetzung: alle Softwaremodule, NVS-/LittleFS-Datenspeicherung, Startup-Flow, Fehlerbehandlung, Nebenläufigkeit |
+| [docs/verdrahtungsplan.html](docs/verdrahtungsplan.html) | Interaktiver Verdrahtungsplan (TFT/Touch/RGB-LED onboard, DHT11 extern) - Klick auf einen Draht im Schema hebt ihn hervor und zeigt Start-/Zielpin |
 | [docs/implementierungsplan.html](docs/implementierungsplan.html) | Visueller Implementierungsplan P0–P8 (lokal im Browser öffnen) |
 | [docs/entscheidungen.md](docs/entscheidungen.md) | Entscheidungsprotokoll: Pinbelegung, Touch-Ansteuerung, Mutex-Fix, Partitionstabelle, Warnschwellwerte, Status-Dashboard |
 | [docs/stueckliste.md](docs/stueckliste.md) | Bauteile pro Gerät + Werkzeug |
