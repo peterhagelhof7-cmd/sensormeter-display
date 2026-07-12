@@ -155,6 +155,11 @@ klont das gewählte Repo falls nötig und baut/flasht das per USB
 angeschlossene Board in einem Rutsch. Details:
 [`scripts/README.md`](scripts/README.md).
 
+**Auf macOS (nur Apple Silicon) oder Linux**: [`scripts/flash.sh`](scripts/flash.sh)
+– Bash-Pendant zu `flash.ps1`, gleicher Ablauf, nur Werkzeug-Installation
+über Homebrew/Paketmanager statt winget. Deckt nur das Flashen ab, kein
+`convert-logo`/`snmp-load`-Äquivalent.
+
 ## Zusammenhang mit dem Sensormeter-Projekt
 
 Die Datenquelle "Sensormeter" fragt das separate

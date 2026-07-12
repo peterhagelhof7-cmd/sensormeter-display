@@ -1656,3 +1656,14 @@ Nur per `pio run` gebaut (kein Board für Sensormeter Display in dieser
 Sitzung angeschlossen) - beide Zweige (Logo fehlt → automatisch schreiben;
 Logo vorhanden → nichts tun) nur per Code-Review verifiziert, nicht auf
 echter Hardware getestet.
+
+## `scripts/flash.sh`: Mac-/Linux-Unterstützung umgesetzt
+
+Neues `scripts/flash.sh` (Bash-Pendant zu `flash.ps1` für macOS - nur
+Apple Silicon/arm64 - und Linux, nur Flashen, kein `convert-logo`/
+`snmp-load`-Äquivalent) identisch aus dem Sensormeter-Repo übernommen -
+volle Begründung und Verifizierungsstand dort in `docs/entscheidungen.md`
+("`scripts/flash.sh`: Mac-/Linux-Unterstützung umgesetzt"). Bei diesem
+Projekt entfällt der `config.h`-Anlage-Schritt wie bei `flash.ps1` schon
+(`HasConfigH`/`project_has_config_h` liefert hier `0`/false) - alle
+Einstellungen liegen zur Laufzeit in NVS statt zur Kompilierzeit.
