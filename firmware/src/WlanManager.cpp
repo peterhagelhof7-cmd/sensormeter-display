@@ -5,6 +5,10 @@
 void WlanManager::begin() {
 	WiFi.mode(WIFI_STA);
 	WiFi.disconnect();
+	// Nach einem WLAN-Aussetzer selbsttaetig wieder verbinden - der Display-
+	// Client hat keine eigene Reconnect-Schleife und haengt sonst bis zum
+	// Neustart ohne Netz (und damit ohne Sensordaten) fest.
+	WiFi.setAutoReconnect(true);
 }
 
 std::vector<WlanManager::NetworkInfo> WlanManager::scan(uint8_t maxResults) {
