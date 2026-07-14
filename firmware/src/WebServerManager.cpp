@@ -863,22 +863,26 @@ String WebServerManager::buildSettingsPage(bool saved) const {
 	// Verbindung, nicht auf eine bereits bestehende) ---
 	{
 		bool staticIp = wlan_.hasStaticIp();
-		IPAddress ip, gateway, subnet;
-		wlan_.loadStaticIp(ip, gateway, subnet);
+		IPAddress ip, gateway, subnet, dns;
+		wlan_.loadStaticIp(ip, gateway, subnet, dns);
 		html += "<fieldset><legend>Netzwerk</legend>";
 		html += "<p class=\"hint\">Aktuelle IP: " + WiFi.localIP().toString() + " (" +
 		        (staticIp ? "statisch" : "DHCP") + ")</p>";
 		html += "<form method=\"POST\" action=\"/network/save\">";
-		html += "<label><input type=\"radio\" name=\"ipMode\" value=\"dhcp\"" + String(staticIp ? "" : " checked") +
-		        "> Automatisch (DHCP)</label>";
-		html += "<label><input type=\"radio\" name=\"ipMode\" value=\"static\"" +
-		        String(staticIp ? " checked" : "") + "> Statisch</label>";
+		html += "<label>Modus</label><select name=\"ipMode\">";
+		html += "<option value=\"dhcp\"" + String(staticIp ? "" : " selected") +
+		        ">Automatisch (DHCP)</option>";
+		html += "<option value=\"static\"" + String(staticIp ? " selected" : "") +
+		        ">Statisch</option>";
+		html += "</select>";
 		html += "<label>IP-Adresse</label><input name=\"ip\" value=\"" +
 		        (staticIp ? ip.toString() : String("")) + "\">";
 		html += "<label>Gateway</label><input name=\"gateway\" value=\"" +
 		        (staticIp ? gateway.toString() : String("")) + "\">";
 		html += "<label>Subnetzmaske</label><input name=\"subnet\" value=\"" +
 		        (staticIp ? subnet.toString() : String("255.255.255.0")) + "\">";
+		html += "<label>DNS-Server (optional, leer = Gateway)</label><input name=\"dns\" value=\"" +
+		        ((staticIp && static_cast<uint32_t>(dns) != 0) ? dns.toString() : String("")) + "\">";
 		html += "<button type=\"submit\">Speichern (Geraet startet neu)</button>";
 		html += "<p class=\"hint\">Prueft vor der Uebernahme, ob die Verbindung tatsaechlich moeglich ist - bei "
 		        "\"Automatisch (DHCP)\" durch einen echten Verbindungsversuch (bis zu 8s, nur bei erhaltener "
@@ -1072,12 +1076,21 @@ void WebServerManager::handleNetworkSave(AsyncWebServerRequest *request) {
 
 	String ipMode = request->hasParam("ipMode", true) ? request->getParam("ipMode", true)->value() : "dhcp";
 	if (ipMode == "static") {
-		IPAddress ip, gateway, subnet;
+		IPAddress ip, gateway, subnet, dns;
 		bool okIp = request->hasParam("ip", true) && ip.fromString(request->getParam("ip", true)->value());
 		bool okGw =
 		    request->hasParam("gateway", true) && gateway.fromString(request->getParam("gateway", true)->value());
 		bool okSn =
 		    request->hasParam("subnet", true) && subnet.fromString(request->getParam("subnet", true)->value());
+		// DNS ist optional: leeres oder ungueltiges Feld -> 0.0.0.0, dann nutzt
+		// WlanManager::connect() automatisch das Gateway als DNS.
+		if (request->hasParam("dns", true)) {
+			String dnsStr = request->getParam("dns", true)->value();
+			dnsStr.trim();
+			if (dnsStr.isEmpty() || !dns.fromString(dnsStr)) {
+				dns = IPAddress((uint32_t)0);
+			}
+		}
 		if (okIp && okGw && okSn) {
 			// Kollisions-Check: nur wenn sich die IP gegenueber der aktuell
 			// aktiven Adresse tatsaechlich aendert - erlaubt, dieselbe (eigene)
@@ -1090,7 +1103,7 @@ void WebServerManager::handleNetworkSave(AsyncWebServerRequest *request) {
 				                   "NICHT uebernommen.");
 				return;
 			}
-			wlan_.saveStaticIp(ip, gateway, subnet);
+			wlan_.saveStaticIp(ip, gateway, subnet, dns);
 		}
 	} else {
 		// Live-Test auf der bestehenden Verbindung, bevor DHCP tatsaechlich
@@ -1116,9 +1129,10 @@ void WebServerManager::handleNetworkSave(AsyncWebServerRequest *request) {
 			// statische IP aktiv war, damit die laufende Verbindung (inkl.
 			// dieser HTTP-Antwort) nicht im DHCP-Test-Zwischenzustand haengen
 			// bleibt.
-			IPAddress prevIp, prevGw, prevSn;
-			if (wlan_.loadStaticIp(prevIp, prevGw, prevSn)) {
-				WiFi.config(prevIp, prevGw, prevSn);
+			IPAddress prevIp, prevGw, prevSn, prevDns;
+			if (wlan_.loadStaticIp(prevIp, prevGw, prevSn, prevDns)) {
+				IPAddress pDns = (static_cast<uint32_t>(prevDns) != 0) ? prevDns : prevGw;
+				WiFi.config(prevIp, prevGw, prevSn, pDns, IPAddress(1, 1, 1, 1));
 			}
 			request->send(409, "text/plain",
 			               "Kein DHCP-Server im Netz gefunden (keine Lease erhalten) - Einstellungen NICHT "

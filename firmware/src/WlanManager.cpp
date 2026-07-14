@@ -86,24 +86,27 @@ bool WlanManager::hasStaticIp() {
 	return has;
 }
 
-bool WlanManager::loadStaticIp(IPAddress &ip, IPAddress &gateway, IPAddress &subnet) {
+bool WlanManager::loadStaticIp(IPAddress &ip, IPAddress &gateway, IPAddress &subnet, IPAddress &dns) {
 	prefs.begin("wifi", true);
 	bool has = prefs.getBool("staticIp", false);
 	if (has) {
 		ip = IPAddress(prefs.getUInt("ip", 0));
 		gateway = IPAddress(prefs.getUInt("gw", 0));
 		subnet = IPAddress(prefs.getUInt("sn", 0));
+		dns = IPAddress(prefs.getUInt("dns", 0)); // 0.0.0.0 = nicht gesetzt -> Gateway
 	}
 	prefs.end();
 	return has;
 }
 
-void WlanManager::saveStaticIp(const IPAddress &ip, const IPAddress &gateway, const IPAddress &subnet) {
+void WlanManager::saveStaticIp(const IPAddress &ip, const IPAddress &gateway, const IPAddress &subnet,
+                               const IPAddress &dns) {
 	prefs.begin("wifi", false);
 	prefs.putBool("staticIp", true);
 	prefs.putUInt("ip", static_cast<uint32_t>(ip));
 	prefs.putUInt("gw", static_cast<uint32_t>(gateway));
 	prefs.putUInt("sn", static_cast<uint32_t>(subnet));
+	prefs.putUInt("dns", static_cast<uint32_t>(dns));
 	prefs.end();
 }
 
@@ -123,9 +126,17 @@ bool WlanManager::connect(const String &ssid, const String &psk, uint32_t timeou
 	WiFi.disconnect();
 	delay(100);
 
-	IPAddress ip, gateway, subnet;
-	if (loadStaticIp(ip, gateway, subnet)) {
-		WiFi.config(ip, gateway, subnet);
+	IPAddress ip, gateway, subnet, dns;
+	if (loadStaticIp(ip, gateway, subnet, dns)) {
+		// WiFi.config() ohne DNS-Argument setzt den DNS-Server auf 0.0.0.0 -
+		// dann schlaegt JEDE Namensaufloesung fehl (NTP "de.pool.ntp.org",
+		// Internet-Ping-Check, SNMP-by-Name). Daher DNS immer setzen: den in
+		// den Einstellungen konfigurierten DNS, falls angegeben - sonst das
+		// Gateway als sinnvollen Default (der Router loest im LAN praktisch
+		// immer auf). Cloudflare 1.1.1.1 als sekundaerer Fallback, falls der
+		// primaere Resolver ausfaellt. Bei DHCP liefert der Server den DNS.
+		IPAddress primaryDns = (static_cast<uint32_t>(dns) != 0) ? dns : gateway;
+		WiFi.config(ip, gateway, subnet, primaryDns, IPAddress(1, 1, 1, 1));
 	}
 
 	WiFi.begin(ssid.c_str(), psk.c_str());

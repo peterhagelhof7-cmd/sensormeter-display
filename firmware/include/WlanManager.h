@@ -31,10 +31,12 @@ public:
 	// Statische IP (optional, sonst DHCP) - wird in connect()/autoConnect()
 	// automatisch angewendet, falls vorhanden. Gespeichert im selben
 	// NVS-Namespace wie die WLAN-Zugangsdaten, da beides zur
-	// Verbindungskonfiguration gehoert.
+	// Verbindungskonfiguration gehoert. Der DNS-Server ist optional: ist er
+	// 0.0.0.0 (nicht gesetzt), verwendet connect() das Gateway als DNS.
 	bool hasStaticIp();
-	bool loadStaticIp(IPAddress &ip, IPAddress &gateway, IPAddress &subnet);
-	void saveStaticIp(const IPAddress &ip, const IPAddress &gateway, const IPAddress &subnet);
+	bool loadStaticIp(IPAddress &ip, IPAddress &gateway, IPAddress &subnet, IPAddress &dns);
+	void saveStaticIp(const IPAddress &ip, const IPAddress &gateway, const IPAddress &subnet,
+	                  const IPAddress &dns);
 	void clearStaticIp();
 
 	// Werksreset "Konfiguration"/"Alles" (siehe WebServerManager/main.cpp

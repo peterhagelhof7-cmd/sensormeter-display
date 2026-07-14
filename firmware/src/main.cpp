@@ -89,11 +89,11 @@ WebServerManager webServer(settings, backlight, ota, wlan, sensormeterManager, s
 // Kommandos (jeweils + Enter):
 //   dhcp                          WLAN auf DHCP umstellen, statische
 //                                  IP/Maske/Gateway loeschen, neu starten
-//   ip <ip> <maske> <gateway>     statische IP setzen, neu starten. Anders
+//   ip <ip> <maske> <gateway> [dns]  statische IP setzen, neu starten. Anders
 //                                  als die Einstellungsseite OHNE
 //                                  Ping-Kollisionspruefung - bewusst einfach
-//                                  gehalten. Kein DNS-Feld (WlanManager
-//                                  kennt keine separate DNS-Konfiguration)
+//                                  gehalten. DNS optional (4. Argument); fehlt
+//                                  er, nutzt WlanManager das Gateway als DNS.
 //   wifi <ssid> <passwort>        neue WLAN-Zugangsdaten setzen, neu starten
 //   status                        aktuellen Zustand ausgeben (WLAN, IP,
 //                                  Signal, Sensor, Heap, Laufzeit) - liest
@@ -133,10 +133,10 @@ void handleSerialCommands() {
 			ESP.restart();
 
 		} else if (cmd.equalsIgnoreCase("ip")) {
-			String parts[3];
+			String parts[4];
 			int count = 0;
 			String rest = args;
-			while (rest.length() > 0 && count < 3) {
+			while (rest.length() > 0 && count < 4) {
 				int sp2 = rest.indexOf(' ');
 				if (sp2 < 0) {
 					parts[count++] = rest;
@@ -147,12 +147,17 @@ void handleSerialCommands() {
 					rest.trim();
 				}
 			}
-			IPAddress ip, mask, gateway;
+			IPAddress ip, mask, gateway, dns;
 			if (count < 3 || !ip.fromString(parts[0]) || !mask.fromString(parts[1]) ||
 			    !gateway.fromString(parts[2])) {
-				Serial.println("[SERIAL] Nutzung: ip <adresse> <maske> <gateway>");
+				Serial.println("[SERIAL] Nutzung: ip <adresse> <maske> <gateway> [dns]");
 			} else {
-				wlan.saveStaticIp(ip, gateway, mask);
+				// DNS optional (4. Argument): fehlt/ungueltig -> 0.0.0.0, dann
+				// verwendet WlanManager das Gateway als DNS.
+				if (count < 4 || !dns.fromString(parts[3])) {
+					dns = IPAddress((uint32_t)0);
+				}
+				wlan.saveStaticIp(ip, gateway, mask, dns);
 				Serial.println("[SERIAL] Statische IP gesetzt, starte neu...");
 				delay(300);
 				ESP.restart();
