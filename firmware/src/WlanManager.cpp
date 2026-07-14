@@ -9,6 +9,9 @@ void WlanManager::begin() {
 	// Client hat keine eigene Reconnect-Schleife und haengt sonst bis zum
 	// Neustart ohne Netz (und damit ohne Sensordaten) fest.
 	WiFi.setAutoReconnect(true);
+	// WLAN-Powersave abschalten - stabilisiert die Verbindung (ESP32-Default-
+	// Modem-Sleep verursacht mit manchen APs haeufige kurze Abbrueche).
+	WiFi.setSleep(false);
 }
 
 std::vector<WlanManager::NetworkInfo> WlanManager::scan(uint8_t maxResults) {
