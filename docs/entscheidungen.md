@@ -1667,3 +1667,51 @@ volle Begründung und Verifizierungsstand dort in `docs/entscheidungen.md`
 Projekt entfällt der `config.h`-Anlage-Schritt wie bei `flash.ps1` schon
 (`HasConfigH`/`project_has_config_h` liefert hier `0`/false) - alle
 Einstellungen liegen zur Laufzeit in NVS statt zur Kompilierzeit.
+
+## 2026-07-16 — OTA-Upload: Projekt-/Versionspruefung gegen Verwechslungen
+
+Direkter Anlass: die Frage, wie sichergestellt wird, dass niemand diese
+Firmware versehentlich auf ein Sensormeter-PoE-Geraet (oder umgekehrt)
+hochlaedt - `/ota/upload` pruefte bisher nur Basic-Auth, nicht den Inhalt
+der `.bin`. Identischer Mechanismus in allen vier Projekten der Familie
+umgesetzt, siehe Sensormeter-Eintrag vom selben Tag fuer die
+vollstaendige Begruendung.
+
+- Neues Feld `FIRMWARE_PROJECT_ID` (`"SENSORMETER-DISPLAY"`) neben
+  `DEVICE_FIRMWARE_VERSION` in `include/config.h(.example)`. Beide
+  zusammen ergeben den in `main.cpp` einkompilierten Marker
+  `"SM-FW-ID:SENSORMETER-DISPLAY:0.9.0-rc4:SM-FW-END"`.
+- **Abweichung von den drei Schwesterprojekten**: dort bindet `main.cpp`
+  `config.h` neu per hartem `#error` bei Fehlen ein (identisches Muster
+  zu deren bereits bestehendem Include). Hier war `config.h` bisher gar
+  nicht in `main.cpp` eingebunden und ist projektweit **nicht**
+  verpflichtend (siehe Eintrag oben, `project_has_config_h = false`) -
+  daher stattdessen derselbe weiche Fallback wie in
+  `WebServerManager.cpp` (`#ifndef DEVICE_FIRMWARE_VERSION #define ...
+  "0.0.0"`, hier zusaetzlich `FIRMWARE_PROJECT_ID` -> `"UNKNOWN"`). Ein
+  hartes `#error` haette den `config.h`-losen Kompilierpfad gebrochen,
+  den `flash.sh`/`flash.ps1` fuer dieses Projekt bewusst offen lassen.
+- `OtaManager` sucht diesen Marker chunk-uebergreifend im Byte-Stream
+  eines Uploads, vergleicht Projekt-ID (exakt) und Version (Semver,
+  `a.b.c[-rcN]`-Schema) gegen die eigenen Werte - `endLocalUpdate()`
+  committet nur bei Uebereinstimmung, sonst `Update.abort()`. Mitglieds-
+  namen hier mit Trailing-Underscore (`markerFound_` etc.) statt
+  Leading-Underscore, passend zum bestehenden Stil dieses Projekts
+  (`otaInProgress_`/`otaSuccess_`).
+- Neue Checkbox "Downgrade erzwingen" im Firmware-Formular (bewusst VOR
+  dem Datei-Feld wegen ESPAsyncWebServers Multipart-Parse-Reihenfolge).
+- Vier unterscheidbare Fehlermeldungen statt einem generischen "Update
+  fehlgeschlagen" (Schreibfehler / kein Marker / falsches Projekt / zu
+  alte Version) - ohne Log-Eintrag, da dieses Projekt (anders als die
+  drei Schwesterprojekte) keinen `pushLogEntry`-Mechanismus hat.
+- Kein kryptografischer Schutz, nur Verwechslungs-Pruefung - siehe
+  Sensormeter-Eintrag.
+
+Getestet: `pio run` - baut sauber (Flash 82,3%/RAM 27,8%, unveraendert
+gegenueber vorherigem Stand). Marker per Byte-Suche in `firmware.bin`
+verifiziert (`SM-FW-ID:SENSORMETER-DISPLAY:0.9.0-rc4:SM-FW-END`). Nicht
+getestet: echter OTA-Upload auf echter Hardware.
+
+**Standing-Vorgabe**: dieser Mechanismus ist ab jetzt fester Bestandteil
+dieses Projekts und laeuft bei kuenftigen Firmware-Versionen automatisch
+mit (siehe Sensormeter-Eintrag).

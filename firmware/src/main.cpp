@@ -29,6 +29,27 @@
 #include "BrandingManager.h"
 #include "BrandingView.h"
 
+// Anders als bei den Schwesterprojekten ist config.h hier NICHT
+// verpflichtend (kein #error bei Fehlen) - dieses Projekt braucht zur
+// Kompilierzeit keine WLAN-Zugangsdaten, siehe config.h.example und
+// scripts/flash.sh/.ps1 (project_has_config_h liefert hier false).
+#if __has_include("config.h")
+#include "config.h"
+#endif
+#ifndef DEVICE_FIRMWARE_VERSION
+#define DEVICE_FIRMWARE_VERSION "0.0.0"
+#endif
+#ifndef FIRMWARE_PROJECT_ID
+#define FIRMWARE_PROJECT_ID "UNKNOWN"
+#endif
+
+// Eingebetteter Marker fuer die OTA-Herkunfts-/Versionspruefung (siehe
+// OtaManager.h/.cpp) - wird beim Firmware-Upload auf einem Schwestergeraet
+// im Byte-Stream dieser .bin gesucht, um Projekt-Identitaet und Version zu
+// pruefen. Ueber den Serial.println() in setup() referenziert, damit der
+// Linker ihn nicht wegoptimiert.
+const char kFirmwareIdentityMarker[] = "SM-FW-ID:" FIRMWARE_PROJECT_ID ":" DEVICE_FIRMWARE_VERSION ":SM-FW-END";
+
 namespace {
 // Wandelt den frei waehlbaren Systemnamen in einen gueltigen mDNS-Hostnamen
 // um (nur a-z/0-9/-, keine Umlaute/Leerzeichen) - Systemname kann Leer-
@@ -242,6 +263,7 @@ void setup() {
 	Serial.begin(115200);
 	delay(200);
 	Serial.println("Sensormeter Display - Boot");
+	Serial.println(kFirmwareIdentityMarker);
 	Serial.println("[SERIAL] Kommandos: dhcp, ip, wifi, status, reset[ all] (+ Enter)");
 
 	display.begin();

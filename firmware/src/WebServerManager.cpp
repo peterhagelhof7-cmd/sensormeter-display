@@ -895,8 +895,11 @@ String WebServerManager::buildSettingsPage(bool saved) const {
 	html += "<fieldset><legend>Firmware-Update</legend>";
 	html += "<p class=\"hint\">Aktuell installiert: " DEVICE_FIRMWARE_VERSION "</p>";
 	html += "<form method=\"POST\" action=\"/ota/upload\" enctype=\"multipart/form-data\">";
+	html += "<label><input type=\"checkbox\" name=\"otaForceDowngrade\"> Downgrade erzwingen (aeltere Version zulassen)</label>";
 	html += "<input type=\"file\" name=\"file\" accept=\".bin\">";
 	html += "<button type=\"submit\">.bin hochladen</button></form>";
+	html += "<p class=\"hint\">Die .bin muss zu diesem Projekt gehoeren (Herkunfts-/Versionspruefung, siehe "
+	        "docs/entscheidungen.md) - falsche oder aeltere Firmware wird sonst abgelehnt.</p>";
 	html += "<p><a href=\"https://github.com/peterhagelhof7-cmd/sensormeter-display/releases\">"
 	        "Releases auf GitHub</a></p>";
 	html += "</fieldset>";
@@ -1195,6 +1198,11 @@ void WebServerManager::handleOtaUploadChunk(AsyncWebServerRequest *request, cons
 	(void)filename;
 
 	if (index == 0) {
+		// Checkbox steht im Formular VOR dem Datei-Feld, damit sie hier schon
+		// geparst ist - ESPAsyncWebServer parst Multipart-Felder in
+		// Reihenfolge des Request-Bodys, ein Feld nach dem Datei-Input waere
+		// an dieser Stelle (erster Chunk der Datei) noch nicht verfuegbar.
+		ota_.setAllowDowngrade(request->hasParam("otaForceDowngrade", true));
 		otaInProgress_ = ota_.beginLocalUpdate(UPDATE_SIZE_UNKNOWN);
 		otaSuccess_ = false;
 	}
@@ -1212,6 +1220,16 @@ void WebServerManager::handleOtaUploadComplete(AsyncWebServerRequest *request) {
 		request->send(200, "text/plain", "Update erfolgreich, Geraet startet neu ...");
 		delay(500);
 		ESP.restart();
+	} else if (!otaInProgress_) {
+		request->send(500, "text/plain", "Update fehlgeschlagen (Schreibfehler)");
+	} else if (!ota_.markerFound()) {
+		request->send(400, "text/plain", "Update abgelehnt: die Datei enthaelt kein gueltiges Firmware-Erkennungsmerkmal.");
+	} else if (!ota_.identityMatches()) {
+		request->send(400, "text/plain", "Update abgelehnt: die hochgeladene Firmware stammt von einem anderen Projekt.");
+	} else if (!ota_.versionAllowed()) {
+		request->send(400, "text/plain",
+		              "Update abgelehnt: die hochgeladene Version ist aelter als die laufende "
+		              "(Downgrade nicht aktiviert).");
 	} else {
 		request->send(500, "text/plain", "Update fehlgeschlagen");
 	}
