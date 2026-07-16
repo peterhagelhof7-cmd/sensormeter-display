@@ -41,9 +41,20 @@ private:
 	bool identityMatches_ = false;
 	bool versionAllowed_ = false;
 
+	// Bewusst rohe Byte-Puffer statt Arduino String: die .bin ist Binaerdaten
+	// und enthaelt reichlich eingebettete Null-Bytes (schon ab Byte 9 im
+	// ESP32-Image-Header) - String::indexOf() ist intern strstr()-basiert
+	// und bricht am ersten Null-Byte ab, wuerde den Marker in einer echten
+	// Firmware-Datei also praktisch nie finden. Siehe docs/entscheidungen.md
+	// "OTA-Marker-Scan fand echte .bin nie - String::indexOf() bricht bei
+	// eingebetteten Null-Bytes ab" (uebernommen aus sensormeter).
 	bool capturing_ = false;
-	String tail_;
-	String capture_;
+	static const size_t kTailCap_ = 16;  // > kMarkerPrefixLen - 1
+	uint8_t tailBuf_[kTailCap_];
+	size_t tailLen_ = 0;
+	static const size_t kCaptureCap_ = 128;  // > kMaxCaptureLen
+	uint8_t captureBuf_[kCaptureCap_];
+	size_t captureLen_ = 0;
 
 	void scanChunkForMarker(uint8_t *data, size_t len);
 	void handleMarkerPayload(const String &payload);
