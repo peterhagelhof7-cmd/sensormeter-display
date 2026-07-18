@@ -1739,3 +1739,28 @@ strstr-basiert) umgestellt, `String tail_`/`capture_` durch feste
 Byte-Puffer ersetzt. `pio run` erfolgreich (Flash 82,3%/RAM 27,9%,
 praktisch unveraendert). Nicht getestet: echter OTA-Upload auf echter
 Hardware - kein Board in dieser Sitzung angeschlossen.
+
+## 2026-07-18 — OTA-Marker-Scan: identischer Chunkgroessen-Bug wie sensormeter, vorsorglich gefixt
+
+Bei sensormeter deckte der erste echte End-to-End-OTA-Test (HTTP-Upload
+ueber LAN, nicht nur `pio run`) auf, dass der obige Fix zwar das
+urspruengliche NUL-Byte-Problem loeste, dabei aber einen neuen,
+subtileren Bug einbaute: `scanChunkForMarker()` kopierte jeden Chunk in
+einen auf `kTailCap_+512` = 528 Byte GEDECKELTEN Zwischenpuffer und
+durchsuchte nur diesen - ein echter HTTP-Upload liefert aber
+regelmaessig groessere Chunks, wodurch alles jenseits der Deckelung
+STILLSCHWEIGEND uebersprungen wurde (weder gescannt noch als Tail
+vorgemerkt). Vollstaendige Herleitung samt Live-Nachweis (Geraetelog
+zeigt Ablehnung vor dem Fix, Erfolg danach) im `sensormeter`-Repo,
+Eintrag "Task-Watchdog + Stack-Overflow-Fix erfolgreich seriell
+geflasht; dabei zweiten OTA-Marker-Scan-Bug gefunden und live behoben".
+
+Dieses Projekt hat exakt dieselbe `kJoinCap_ = kTailCap_ + 512`-Struktur
+(nur mit der abweichenden trailing-underscore-Namenskonvention) - Bug
+per Quellcode-Vergleich bestaetigt, nicht nur vermutet. Fix identisch
+uebernommen: kein kopierter Zwischenpuffer mehr fuer den Chunk selbst -
+`findBytes()` durchsucht `data`/`len` jetzt direkt, ein kleiner
+Join-Puffer (`kTailCap_+kMarkerPrefixLen` = 25 Byte) wird nur noch fuer
+den echten Tail-Grenzfall gebraucht. `pio run` erfolgreich (Flash/RAM
+praktisch unveraendert). Noch nicht auf echter Hardware geflasht/per
+echtem OTA-Upload getestet - Board wird in dieser Sitzung angeschlossen.
