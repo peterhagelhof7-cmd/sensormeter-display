@@ -23,6 +23,7 @@ Warnschwellwerte, DHT11-Kalibrierkorrektur) inkl. lokalem OTA-Update per
 
 | Datei | Inhalt |
 |---|---|
+| [docs/systemuebersicht.pdf](docs/systemuebersicht.pdf) | Familienweite Systemübersicht: Funktionsumfang, Zusammenspiel, Zabbix-Anbindung aller vier Projekte (identisch in allen vier Repos) |
 | [docs/sensormeter-display-onepager.pdf](docs/sensormeter-display-onepager.pdf) | One-Pager: Projektübersicht, Architektur, Kennzahlen auf einer Seite |
 | [docs/admin-guide.pdf](docs/admin-guide.pdf) | Admin-Guide: Inbetriebnahme, Touch-Bedienung, Konfiguration über die Weboberfläche |
 | [docs/projektfamilie.html](docs/projektfamilie.html) | Architekturskizze: wie die vier Sensormeter-Projekte zusammenhängen |
