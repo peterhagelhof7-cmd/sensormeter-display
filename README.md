@@ -58,6 +58,9 @@ Hardware-Alternative (ESP32-S3/Heemol) wurden bewusst **nicht** übernommen.
 **Version:** `0.9.0-rc4` (Beta) — Versionsschema siehe
 [docs/entscheidungen.md](docs/entscheidungen.md#versionierung).
 
+Fertiges Binary für das lokale OTA-Update (kein PlatformIO nötig):
+[Releases → v0.9.0-rc4](https://github.com/peterhagelhof7-cmd/sensormeter-display/releases/tag/v0.9.0-rc4).
+
 Aktueller Stand: **P0–P8 vollständig, Board-Bringup abgeschlossen,
 Qualitätskontrolle läuft** (siehe
 [docs/implementierungsplan.html](docs/implementierungsplan.html)).
