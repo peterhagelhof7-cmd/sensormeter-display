@@ -57,8 +57,13 @@ Hardware-Alternative (ESP32-S3/Heemol) wurden bewusst **nicht** übernommen.
 **Version:** `0.9.0-rc4` (Beta) — Versionsschema siehe
 [docs/entscheidungen.md](docs/entscheidungen.md#versionierung).
 
-Aktueller Stand: **P0–P8 vollständig** (siehe
+Aktueller Stand: **P0–P8 vollständig, Board-Bringup abgeschlossen,
+Qualitätskontrolle läuft** (siehe
 [docs/implementierungsplan.html](docs/implementierungsplan.html)).
+Zuletzt (2026-07-18) einen bei Sensormeter gefundenen Chunkgrößen-Bug im
+OTA-Marker-Scan übernommen und behoben, gebaut und auf echter Hardware
+geflasht (sauberer Boot verifiziert), siehe
+[docs/entscheidungen.md](docs/entscheidungen.md).
 
 ```
 cd firmware
