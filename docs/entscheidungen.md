@@ -1873,3 +1873,35 @@ in der Uebersichtstabelle), und wie man von der Graph-Ansicht wieder
 zurueck zur Uebersicht kommt (eigener State ausserhalb der normalen
 Slide-Rotation, aehnlich wie die Settings-/Info-UI heute schon als
 blockierende Sub-Screens funktionieren).
+
+## 2026-07-21 — Umstellung SNMP v1 -> v2c (Client-Seite)
+
+Nutzerentscheidung nach Machbarkeitspruefung (SNMPv3 zuerst geprueft und
+verworfen - Server-Bibliothek `SNMP_Agent@2.1.0` bei sensormeter/-poe/
+-wlan hat keinerlei v3/USM-Unterstuetzung, waere Neuentwicklung auf
+beiden Seiten gewesen; siehe dortige Eintraege). v2c dagegen einfach:
+die Agent-Bibliothek verhandelt die Version bereits pro eingehender
+Anfrage automatisch (`SNMPPacket.cpp` liest sie direkt aus dem Paket,
+kein fest programmierter Server-Wert) - keine der drei
+`SNMPManager.cpp`-Dateien referenziert `SNMP_VERSION` ueberhaupt.
+
+Aenderung ausschliesslich hier auf Client-Seite noetig:
+`SnmpClient.cpp`, Message-Version-Feld von `encodeInteger(0, version)`
+(v1) auf `encodeInteger(1, version)` (v2c). PDU-Form/Response-Parsing
+bleiben unveraendert kompatibel, da GET/GetResponse in v1 und v2c
+dieselben Tags nutzen und hier keine v2c-spezifischen Faehigkeiten
+(GetBulk, Counter64) gebraucht werden.
+
+**Kein Sicherheitsgewinn** - v2c nutzt weiterhin das reine
+Community-String-Modell im Klartext, exakt wie v1. Diese Umstellung ist
+rein pragmatisch (leichte technische Verbesserung), nicht
+sicherheitsmotiviert.
+
+`docs/lastenheft.txt` Abschnitt 7.3 entsprechend von "SNMP v1" auf
+"SNMP v2c" aktualisiert. `pio run` erfolgreich, Speicherbedarf
+unveraendert (91.400 B RAM / 1.080.493 B Flash). Noch nicht auf echter
+Hardware getestet.
+
+Betrifft auch `sensormeter`/`sensormeter-poe`/`sensormeter-wlan` (dort
+keine Code-Aenderung noetig, nur Lastenheft-Anpassung - siehe jeweils
+eigener Eintrag).

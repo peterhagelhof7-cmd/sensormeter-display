@@ -116,9 +116,19 @@ bool SnmpClient::getRaw(const String &host, const String &community, const Strin
 	BerBuffer pdu;
 	pdu.tlv(0xA0, pduContent.data, pduContent.len);
 
-	// Message: SEQUENCE { version(0=v1), community, PDU }
+	// Message: SEQUENCE { version(1=v2c), community, PDU }
+	// Bis 2026-07-21 v1 (0) - Umstellung auf v2c: Gegenstelle (SNMP_Agent-
+	// Bibliothek, siehe sensormeter/-poe/-wlan SNMPManager.cpp) verhandelt
+	// die Version ohnehin pro Anfrage automatisch (SNMPPacket.cpp liest sie
+	// direkt aus dem eingehenden Paket, keine feste Server-Version) - auf
+	// Client-Seite reicht daher diese einzelne Konstante. PDU-Form/
+	// Response-Parsing bleiben unveraendert kompatibel (v2c nutzt fuer GET/
+	// GetResponse dieselben Tags wie v1, neue v2c-Faehigkeiten wie GetBulk/
+	// Counter64 werden hier nicht genutzt). Sicherheitsmodell bleibt
+	// unveraendert (Community-String weiterhin im Klartext) - siehe
+	// docs/entscheidungen.md fuer die Abwaegung ggue. SNMPv3.
 	BerBuffer version;
-	encodeInteger(0, version);
+	encodeInteger(1, version);
 	BerBuffer communityBuf;
 	encodeOctetString(community, communityBuf);
 

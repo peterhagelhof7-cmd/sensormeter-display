@@ -139,7 +139,8 @@ Jede Auswahl wird sofort im Flash gespeichert.
 - Schriftgröße gut lesbar (deutlich größer als Statuszeile)
 
 7.3 Sensormeter (SNMP)
-Abfrage des bestehenden "Sensormeter"-Projekts (WT32-ETH01) per SNMP v1.
+Abfrage des bestehenden "Sensormeter"-Projekts (WT32-ETH01) per SNMP v2c
+(bis 2026-07-21 v1 - siehe docs/entscheidungen.md).
 OID-Struktur bereits aus diesem Projekt bekannt, daher hier bereits final
 festgelegt statt "wird nachgereicht":
 
