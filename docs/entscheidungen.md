@@ -1801,3 +1801,37 @@ generisch (HTML `<select>`), keine Anpassung noetig.
 
 `pio run` erfolgreich (Flash 82.4%, RAM 27.9%). Noch nicht auf echter
 Hardware getestet.
+
+## 2026-07-21 — Vorgemerkt: Web-Graphen pro abgefragtem sm-Ziel, nach dem "sm-Modell"
+
+Nutzeranfrage (nur Frage, noch nicht umgesetzt): im Web-Interface fuer
+jedes per SNMP abgefragte Sensormeter-Ziel (sm/sm-poe/sm-wlan, verwaltet
+von `SensormeterManager`) einen Verlaufsgraph anzeigen, analog zum
+bereits vorhandenen Graph fuer den internen DHT11-Sensor auf der
+Uebersichtsseite.
+
+Feasibility-Check (siehe Recherche-Ergebnis dieses Tages):
+- `SensormeterManager` speichert aktuell GAR KEINEN Verlauf - jeder
+  SNMP-Poll ueberschreibt den vorherigen Wert direkt im `Target`-Struct.
+  Muesste fuer dieses Feature erst einen Ringpuffer pro Ziel (und bei
+  PRO-Geraeten pro Sensor) bekommen.
+- Dieses Projekt (`sensormeter-display`) nutzt fuer seinen EIGENEN
+  internen Graph (`GraphManager`) noch das einfache Modell: 24 Punkte,
+  30-Min-Intervall, serverseitig als fertiges `<svg>` gerendert, kein
+  Chart.js, keine JSON-API.
+- Die drei anderen Familienmitglieder (`sensormeter`, `sensormeter-poe`,
+  `sensormeter-wlan`) haben dagegen bereits UNTEREINANDER konsistent das
+  bessere Modell: `DataManager` mit 168-Punkte/7-Tage-Ringpuffer (stuendlich),
+  echte JSON-`/api/graph`-Route, clientseitiges Rendering per Chart.js
+  (`WebServerManager.cpp`, `_server.on("/api/graph", ...)` + `fetch('/api/graph')...new Chart(...)`
+  - identischer Code in allen drei Projekten).
+
+**Entscheidung (vorgemerkt, noch nicht umgesetzt):** Wenn das Feature
+kommt, NICHT das aktuelle einfache SVG-Modell dieses Projekts fuer die
+neuen Pro-Ziel-Graphen kopieren, sondern das bereits an drei Stellen
+(sm/sm-poe/sm-wlan) bewaehrte "sm-Modell" uebernehmen (Ringpuffer-Groesse/
+-Intervall, JSON-API-Form, Chart.js-Einbindung) - sowohl fuer Konsistenz
+in der Familie als auch weil es sich dort bereits als funktionierend und
+speicherbudget-vertraeglich erwiesen hat. Ob dabei auch der bestehende
+interne DHT11-Graph dieses Projekts (aktuell simples SVG) mit auf dasselbe
+Modell umgestellt wird, ist noch offen.
