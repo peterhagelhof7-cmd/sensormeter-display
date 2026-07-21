@@ -44,6 +44,11 @@ public:
 	bool sensorValid(size_t i, uint8_t sensorIndex) const;
 	float sensorTempC(size_t i, uint8_t sensorIndex) const;
 	float sensorHumidityPct(size_t i, uint8_t sensorIndex) const;
+	// Fuer die Sensormeter-Uebersichtsseite (Name + Uptime aller Ziele) -
+	// wird wie die Messwerte laufend in refreshReadings() nachgezogen, nicht
+	// nur einmalig bei resolveIdentity().
+	bool uptimeValid(size_t i) const;
+	uint32_t uptimeSeconds(size_t i) const;
 
 private:
 	struct Target {
@@ -55,6 +60,8 @@ private:
 		bool valid[2] = {false, false};
 		float tempC[2] = {0, 0};
 		float humidityPct[2] = {0, 0};
+		bool uptimeValid = false;
+		uint32_t uptimeSeconds = 0;
 	};
 
 	// Gleicht targets_ mit den in den Einstellungen konfigurierten IPs ab -

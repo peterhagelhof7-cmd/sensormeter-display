@@ -259,6 +259,69 @@ bool contentDirty = true;
 uint32_t lastPeriodicRedrawMs = 0;
 constexpr uint32_t kPeriodicRedrawIntervalMs = 5000;
 
+// Ein Eintrag der dynamischen Slide-Liste im Slide-Modus. smTargetIndex/
+// smSensorIndex sind nur fuer type==Sensormeter relevant und werden direkt
+// an SensormeterView::draw() durchgereicht (siehe dort); -1 bedeutet
+// "keine feste Zuordnung, View entscheidet selbst" (Static-Modus bzw. der
+// Platzhalter-Slide, wenn kein Ziel aufgeloest ist).
+struct SlideEntry {
+	DataSource type = DataSource::Dht11;
+	int8_t smTargetIndex = -1;
+	uint8_t smSensorIndex = 0;
+
+	SlideEntry() = default;
+	// Default-Member-Initializer oben verhindern Aggregate-Initialisierung
+	// mit {...} beim hier verwendeten C++-Standard - deshalb expliziter
+	// Konstruktor statt reinem Aggregate.
+	SlideEntry(DataSource t, int8_t targetIdx = -1, uint8_t sensorIdx = 0)
+	    : type(t), smTargetIndex(targetIdx), smSensorIndex(sensorIdx) {}
+};
+
+constexpr size_t kMaxSlideEntries = 2 + SensormeterManager::kMaxTargets * 2 + 1 + 3;
+SlideEntry slideEntries[kMaxSlideEntries];
+size_t slideEntryCount = 0;
+
+// Baut die Slide-Liste fuer den Slide-Modus bei jedem loop()-Durchlauf neu
+// auf - guenstig genug (<= kMaxSlideEntries Eintraege, keine I/O), analog
+// zum bestehenden Muster in SensormeterView::draw(), das sein eigenes
+// kleines slides[]-Array ebenfalls bei jedem Aufruf neu aufbaut.
+//
+// Nutzeranforderung (siehe docs/entscheidungen.md): bisher war
+// "Sensormeter" EIN Slide in dieser Liste, der intern (eigener Timer in
+// SensormeterView) durch alle Ziele rotierte - fuer den Betrachter zeigte
+// "der Slide" dadurch faktisch nur eines von mehreren abgefragten sm.
+// Jetzt bekommt jedes aufgeloeste Ziel (und bei PRO-Geraeten Sensor 2
+// zusaetzlich) einen eigenen Slide in der AEUSSEREN Rotation, plus eine
+// zusaetzliche Uebersichtsseite (Name + Uptime aller Ziele).
+void buildSlideEntries() {
+	slideEntryCount = 0;
+	slideEntries[slideEntryCount++] = {DataSource::Dht11};
+	slideEntries[slideEntryCount++] = {DataSource::Uhrzeit};
+
+	size_t smTargetCount = sensormeterManager.targetCount();
+	size_t resolvedCount = 0;
+	for (size_t i = 0; i < smTargetCount && slideEntryCount < kMaxSlideEntries - 4; i++) {
+		if (!sensormeterManager.isResolved(i)) continue;
+		slideEntries[slideEntryCount++] = {DataSource::Sensormeter, static_cast<int8_t>(i), 0};
+		resolvedCount++;
+		if (sensormeterManager.isPro(i)) {
+			slideEntries[slideEntryCount++] = {DataSource::Sensormeter, static_cast<int8_t>(i), 1};
+			resolvedCount++;
+		}
+	}
+	if (resolvedCount == 0) {
+		// Kein Ziel konfiguriert oder noch keins aufgeloest - ein einzelner
+		// Platzhalter-Slide wie bisher (SensormeterView zeigt dafuer per
+		// overrideTargetIndex=-1 ihren bestehenden Hinweistext-Pfad).
+		slideEntries[slideEntryCount++] = {DataSource::Sensormeter, -1, 0};
+	}
+	slideEntries[slideEntryCount++] = {DataSource::SensormeterOverview};
+
+	slideEntries[slideEntryCount++] = {DataSource::Ping};
+	slideEntries[slideEntryCount++] = {DataSource::PingTargets};
+	slideEntries[slideEntryCount++] = {DataSource::Branding};
+}
+
 void setup() {
 	Serial.begin(115200);
 	delay(200);
@@ -316,23 +379,38 @@ void setup() {
 	webServer.begin();
 }
 
-DataSource currentActiveSource() {
+// slideEntries/slideEntryCount muessen von buildSlideEntries() bereits
+// befuellt sein, bevor diese Funktion im Slide-Modus aufgerufen wird (siehe
+// loop() - buildSlideEntries() laeuft dort bewusst VOR dieser Funktion,
+// auch vor der Tap-Weiterschalt-Behandlung, die ebenfalls slideEntryCount
+// braucht).
+SlideEntry currentActiveSource() {
 	if (settings.mode() == OperatingMode::Static) {
-		return settings.staticSource();
+		return SlideEntry{settings.staticSource(), -1, 0};
 	}
+	if (slideEntryCount == 0) {
+		return SlideEntry{DataSource::Dht11, -1, 0};
+	}
+	if (slideIndex >= slideEntryCount) slideIndex = 0;
 
 	uint32_t now = millis();
 	uint32_t intervalMs = static_cast<uint32_t>(settings.slideIntervalSec()) * 1000UL;
 	if (now - slideLastSwitchMs >= intervalMs) {
 		slideLastSwitchMs = now;
-		slideIndex = (slideIndex + 1) % kAvailableDataSourceCount;
+		slideIndex = (slideIndex + 1) % slideEntryCount;
 		contentDirty = true;
 	}
-	return kAvailableDataSources[slideIndex];
+	return slideEntries[slideIndex];
 }
 
 void loop() {
 	handleSerialCommands();
+
+	// Muss vor der Tap-Weiterschalt-Behandlung unten UND vor
+	// currentActiveSource() laufen, die beide slideEntryCount lesen. Im
+	// Static-Modus ungenutzt (currentActiveSource() umgeht die Liste dort
+	// komplett), daher nicht extra gegate't - der Aufbau ist guenstig genug.
+	buildSlideEntries();
 
 	// Zahnrad in der Statusleiste antippbar - oeffnet die Einstellungen
 	// (blockierend). Erst auf Loslassen warten, damit der modale Dialog
@@ -382,7 +460,9 @@ void loop() {
 		while (touch.read(tx, ty)) {
 			delay(15);
 		}
-		slideIndex = (slideIndex + (tappedLeft ? kAvailableDataSourceCount - 1 : 1)) % kAvailableDataSourceCount;
+		if (slideEntryCount > 0) {
+			slideIndex = (slideIndex + (tappedLeft ? slideEntryCount - 1 : 1)) % slideEntryCount;
+		}
 		slideLastSwitchMs = millis();
 		contentDirty = true;
 	}
@@ -404,25 +484,29 @@ void loop() {
 	bool blinkOn = (millis() / 1000) % 2 == 0;
 	uint16_t bgColor = (alert.active && blinkOn) ? (alert.blue ? TFT_BLUE : TFT_RED) : TFT_WHITE;
 
-	DataSource activeSource = currentActiveSource();
+	SlideEntry activeEntry = currentActiveSource();
+	DataSource activeSource = activeEntry.type;
 	bool showBottomBar = !(settings.mode() == OperatingMode::Static && activeSource == DataSource::Uhrzeit);
 	int16_t contentBottom = showBottomBar ? Layout::kContentBottom : DisplayManager::kScreenHeight;
 
 	uint32_t now = millis();
-	// Nur Uhrzeit- und Sensormeter-Ansicht brauchen einen Redraw ohne neue
-	// Messung (Uhrzeit aendert sich rein zeitgesteuert, Sensormeter rotiert
-	// bei mehreren Zielen/Sensoren intern durch die Slides - siehe
-	// SensormeterView). Fuer die anderen Quellen erzeugte ein unbedingter
-	// 5s-Takt einen sichtbaren, unnoetigen Full-Redraw ohne Datenaenderung
+	// Uhrzeit-, Sensormeter- und Sensormeter-Uebersichts-Ansicht brauchen
+	// einen Redraw ohne neue Messung (Uhrzeit aendert sich rein
+	// zeitgesteuert; Sensormeter im Static-Modus rotiert intern durch die
+	// Slides, siehe SensormeterView; die Uebersicht zeigt eine laufende
+	// Uptime). Fuer die anderen Quellen erzeugte ein unbedingter 5s-Takt
+	// einen sichtbaren, unnoetigen Full-Redraw ohne Datenaenderung
 	// (Hardware-Befund: Bildschirm "zitterte" gelegentlich, siehe
 	// docs/entscheidungen.md) - dafuer reicht bereits sourceJustPolled/contentDirty.
-	bool periodicDue = (activeSource == DataSource::Uhrzeit || activeSource == DataSource::Sensormeter) &&
+	bool periodicDue = (activeSource == DataSource::Uhrzeit || activeSource == DataSource::Sensormeter ||
+	                     activeSource == DataSource::SensormeterOverview) &&
 	                    (now - lastPeriodicRedrawMs >= kPeriodicRedrawIntervalMs);
 
-	bool sourceJustPolled = (activeSource == DataSource::Dht11 && dhtPolled) ||
-	                        (activeSource == DataSource::Sensormeter && sensormeterPolled) ||
-	                        ((activeSource == DataSource::Ping || activeSource == DataSource::PingTargets) &&
-	                         pingPolled);
+	bool sourceJustPolled =
+	    (activeSource == DataSource::Dht11 && dhtPolled) ||
+	    ((activeSource == DataSource::Sensormeter || activeSource == DataSource::SensormeterOverview) &&
+	     sensormeterPolled) ||
+	    ((activeSource == DataSource::Ping || activeSource == DataSource::PingTargets) && pingPolled);
 	// bgColor aendert sich nicht nur bei An-/Abklingen eines Alarms, sondern
 	// auch bei jedem 1s-Blink-Taktwechsel waehrend ein Alarm aktiv ist -
 	// erzwingt in beiden Faellen ein Neuzeichnen, auch ohne neue Messung.
@@ -441,7 +525,12 @@ void loop() {
 				clockView.draw(display, Layout::kContentTop, contentBottom, bgColor);
 				break;
 			case DataSource::Sensormeter:
-				sensormeterView.draw(display, sensormeterManager, Layout::kContentTop, contentBottom, bgColor);
+				sensormeterView.draw(display, sensormeterManager, Layout::kContentTop, contentBottom, bgColor,
+				                     activeEntry.smTargetIndex, activeEntry.smSensorIndex);
+				break;
+			case DataSource::SensormeterOverview:
+				sensormeterView.drawOverview(display, sensormeterManager, Layout::kContentTop, contentBottom,
+				                             bgColor);
 				break;
 			case DataSource::Ping:
 				pingView.drawAverage(display, pingManager, Layout::kContentTop, contentBottom, bgColor);

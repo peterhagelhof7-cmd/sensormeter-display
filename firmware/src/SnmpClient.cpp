@@ -217,6 +217,21 @@ bool SnmpClient::getInteger(const String &host, const String &community, const S
 	return true;
 }
 
+bool SnmpClient::getTimeTicks(const String &host, const String &community, const String &oidDotted,
+                               uint32_t &outValue, uint16_t port, uint32_t timeoutMs) {
+	uint8_t content[8];
+	size_t len = sizeof(content);
+	if (!getRaw(host, community, oidDotted, 0x43, content, len, port, timeoutMs)) {
+		return false;
+	}
+	uint32_t v = 0;
+	for (size_t i = 0; i < len; i++) {
+		v = (v << 8) | content[i];
+	}
+	outValue = v;
+	return true;
+}
+
 bool SnmpClient::getString(const String &host, const String &community, const String &oidDotted,
                             String &outValue, uint16_t port, uint32_t timeoutMs) {
 	uint8_t content[128];

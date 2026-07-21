@@ -1764,3 +1764,40 @@ Join-Puffer (`kTailCap_+kMarkerPrefixLen` = 25 Byte) wird nur noch fuer
 den echten Tail-Grenzfall gebraucht. `pio run` erfolgreich (Flash/RAM
 praktisch unveraendert). Noch nicht auf echter Hardware geflasht/per
 echtem OTA-Upload getestet - Board wird in dieser Sitzung angeschlossen.
+
+## 2026-07-21 — Jedes abgefragte sm bekommt einen eigenen Slide + neue Uebersichtsseite (Name+Uptime)
+
+Nutzerbefund: bei mehreren konfigurierten Sensormeter-Zielen zeigte "der
+Slide" im Slide-Modus faktisch nur eines - "Sensormeter" war EIN Slot in
+der aeusseren Rotation (`kAvailableDataSources`), der intern per eigenem
+4s-Timer (`SensormeterView::currentSlide_`) durch alle aufgeloesten Ziele
+rotierte. Fuer den Betrachter, der diesen internen Takt nicht kennt, sah
+das wie ein einzelnes, sich gelegentlich aenderndes Geraet aus, nicht wie
+mehrere.
+
+Fix: `main.cpp` baut jetzt bei jedem `loop()`-Durchlauf eine dynamische
+Slide-Liste (`buildSlideEntries()`/`SlideEntry[]`) - jedes aufgeloeste Ziel
+(und bei PRO-Geraeten Sensor 2 zusaetzlich) bekommt einen eigenen Eintrag
+in der AEUSSEREN Rotation, `SensormeterView::draw()` bekommt dafuer einen
+neuen optionalen `overrideTargetIndex`/`overrideSensorIndex`-Parameter
+(Default -1 = alte interne Auto-Rotation, weiterhin fuer den Static-Modus
+genutzt). Zusaetzlich eine neue Datenquelle `DataSource::SensormeterOverview`
+(eigene Tabellen-Ansicht `SensormeterView::drawOverview()`: Systemname +
+Uptime aller konfigurierten Ziele) - wird von `buildSlideEntries()` nach
+den Geraete-Slides eingefuegt.
+
+Uptime war bisher gar nicht abgefragt - SNMP-OID `.5.1.0` existiert auf der
+Gegenstelle bereits (`sensormeter/repo/firmware/src/SNMPManager.cpp`), aber
+als TimeTicks-Typ (ASN.1-Tag 0x43), nicht INTEGER (0x02) wie die bisher
+einzige genutzten Typen. `SnmpClient::getTimeTicks()` neu ergaenzt,
+`SensormeterManager::refreshReadings()` fragt sie ab (nicht in
+`resolveIdentity()`, da sie sich laufend aendert).
+
+Nebenbefund beim Bauen: `SettingsUI.cpp`s Static-Quellen-Liste hatte eine
+fest verdrahtete Zeilenhoehe (40px) fuer 6 Eintraege - mit dem 7. Eintrag
+waere die Liste ueber den 240px-Bildschirmrand hinausgelaufen. Auf 28px
+reduziert. Web-Dashboard-Dropdown (`WebServerManager.cpp`) war bereits
+generisch (HTML `<select>`), keine Anpassung noetig.
+
+`pio run` erfolgreich (Flash 82.4%, RAM 27.9%). Noch nicht auf echter
+Hardware getestet.

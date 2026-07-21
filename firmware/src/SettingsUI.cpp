@@ -124,11 +124,12 @@ bool runSlideConfig(DisplayManager &display, TouchManager &touch, SettingsManage
 }
 
 // Eigene, kleinere Zeilenhoehe als das 4-Punkt-Hauptmenu (kMenuRowH):
-// kAvailableDataSourceCount ist mittlerweile auf 5 gewachsen (P7/P8) - mit
-// kMenuRowH (44px) waere die letzte Zeile ueber den Bildschirmrand (240px)
-// hinausgelaufen. 40px * 5 = 200px, ab y=36 bis 236, passt mit Reserve.
+// kAvailableDataSourceCount ist mittlerweile auf 7 gewachsen (Sensormeter-
+// Uebersicht dazugekommen) - mit kMenuRowH (44px) oder dem froeheren 40px
+// waere die letzte Zeile ueber den Bildschirmrand (240px) hinausgelaufen.
+// 28px * 7 = 196px, ab y=36 bis 232, passt mit Reserve.
 constexpr int16_t kSourceRowY = 36;
-constexpr int16_t kSourceRowH = 40;
+constexpr int16_t kSourceRowH = 28;
 
 void drawStaticSourceList(DisplayManager &display) {
 	TFT_eSPI &tft = display.raw();

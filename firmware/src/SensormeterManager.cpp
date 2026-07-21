@@ -9,6 +9,9 @@ constexpr const char *kOidSensor1Hum = "1.3.6.1.4.1.99999.3.3.0";
 constexpr const char *kOidSensor2Name = "1.3.6.1.4.1.99999.4.1.0";
 constexpr const char *kOidSensor2Temp = "1.3.6.1.4.1.99999.4.2.0";
 constexpr const char *kOidSensor2Hum = "1.3.6.1.4.1.99999.4.3.0";
+// TimeTicks (1/100s), siehe SnmpClient::getTimeTicks() - Gegenstelle
+// (sensormeter/-poe, SNMPManager.cpp) liefert Systemstatus, .5.1 = Uptime.
+constexpr const char *kOidUptime = "1.3.6.1.4.1.99999.5.1.0";
 } // namespace
 
 void SensormeterManager::begin() {
@@ -98,6 +101,12 @@ void SensormeterManager::refreshReadings(size_t idx, const String &ip, bool isPr
 		okHum2 = okTemp2 && snmp_.getInteger(ip, community, kOidSensor2Hum, hum2_10);
 	}
 
+	// Fuer die Uebersichtsseite (Name + Uptime) - hier statt in
+	// resolveIdentity() abgefragt, weil sie sich laufend aendert, nicht nur
+	// einmalig beim erstmaligen Aufloesen des Ziels.
+	uint32_t uptimeTicks = 0;
+	bool okUptime = snmp_.getTimeTicks(ip, community, kOidUptime, uptimeTicks);
+
 	xSemaphoreTake(mutex_, portMAX_DELAY);
 	if (idx < kMaxTargets && targets_[idx].ip == ip) {
 		if (okTemp && okHum) {
@@ -109,6 +118,10 @@ void SensormeterManager::refreshReadings(size_t idx, const String &ip, bool isPr
 			targets_[idx].tempC[1] = temp2_10 / 10.0f;
 			targets_[idx].humidityPct[1] = hum2_10 / 10.0f;
 			targets_[idx].valid[1] = true;
+		}
+		if (okUptime) {
+			targets_[idx].uptimeSeconds = uptimeTicks / 100;
+			targets_[idx].uptimeValid = true;
 		}
 	}
 	xSemaphoreGive(mutex_);
@@ -200,6 +213,20 @@ float SensormeterManager::sensorTempC(size_t i, uint8_t sensorIndex) const {
 float SensormeterManager::sensorHumidityPct(size_t i, uint8_t sensorIndex) const {
 	xSemaphoreTake(mutex_, portMAX_DELAY);
 	float v = (i < count_ && sensorIndex < 2) ? targets_[i].humidityPct[sensorIndex] : 0.0f;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+bool SensormeterManager::uptimeValid(size_t i) const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	bool v = (i < count_) && targets_[i].uptimeValid;
+	xSemaphoreGive(mutex_);
+	return v;
+}
+
+uint32_t SensormeterManager::uptimeSeconds(size_t i) const {
+	xSemaphoreTake(mutex_, portMAX_DELAY);
+	uint32_t v = (i < count_) ? targets_[i].uptimeSeconds : 0;
 	xSemaphoreGive(mutex_);
 	return v;
 }

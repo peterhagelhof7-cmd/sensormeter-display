@@ -23,6 +23,12 @@ public:
 	bool getString(const String &host, const String &community, const String &oidDotted,
 	               String &outValue, uint16_t port = 161, uint32_t timeoutMs = 2000);
 
+	// Wie getInteger(), aber fuer TimeTicks-Werte (ASN.1-Tag 0x43, eigener
+	// SNMP-SMI-Typ, unsigned statt INTEGERs Zweierkomplement) - Gegenstelle
+	// liefert die Uptime damit (siehe SensormeterManager.cpp, OID .5.1.0).
+	bool getTimeTicks(const String &host, const String &community, const String &oidDotted,
+	                   uint32_t &outValue, uint16_t port = 161, uint32_t timeoutMs = 2000);
+
 private:
 	// Gemeinsamer Kern von getInteger()/getString(): baut die GetRequest,
 	// sendet sie, wartet auf Antwort und liefert den Rohinhalt des letzten
