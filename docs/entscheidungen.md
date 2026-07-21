@@ -1835,3 +1835,41 @@ in der Familie als auch weil es sich dort bereits als funktionierend und
 speicherbudget-vertraeglich erwiesen hat. Ob dabei auch der bestehende
 interne DHT11-Graph dieses Projekts (aktuell simples SVG) mit auf dasselbe
 Modell umgestellt wird, ist noch offen.
+
+## 2026-07-21 — Vorgemerkt (Ergaenzung): RAM-only Verlauf + Graph-Slide ab Uebersichtsseite auswaehlbar
+
+Zwei weitere Praezisierungen zum Feature aus dem Eintrag "Web-Graphen pro
+abgefragtem sm-Ziel" weiter oben (immer noch nur vorgemerkt, nicht
+umgesetzt):
+
+**RAM-only statt LittleFS-Persistenz:** Der dort geaeusserte Flash-
+Verschleiss-Einwand (10 Ziele × Ganzdatei-Neuschreiben) entfaellt, wenn
+der Verlauf NUR im RAM gehalten wird, nicht auf LittleFS persistiert.
+Kostenschaetzung mit dem kompakten `GraphManager::Entry`-Format (8 Byte/
+Punkt: `time_t` + 2× `int16_t`, kein Bedarf fuer die zusaetzlichen
+Sensor2-Druck/Lux/CO2-Felder der `DataManager::HourValue`-Struktur aus
+sm/sm-poe/sm-wlan, da per SNMP ohnehin nur Temp+Feuchte ankommen): bei
+168 Punkten × bis zu 10 Ziel-Slots (5 Ziele × 2 Sensoren PRO) ~13,4 KB,
+bei 24 Punkten (wie der aktuelle interne Graph) nur ~1,9 KB - beides
+angesichts 279 KB freiem RAM voellig unkritisch. Tausch: Verlauf geht bei
+Neustart verloren, dafuer kein zusaetzlicher Flash-Verschleiss/keine
+Ganzdatei-Rewrites mehr - eingeschaetzt als vertretbar (baut sich nach
+Neustart einfach neu auf).
+
+**Bedienung am Geraet selbst (nicht nur im Web-Interface):** Von der
+`SensormeterOverview`-Slide (Name+Uptime-Tabelle aller Ziele, siehe
+frueherer Eintrag "Jeder abgefragte Sensormeter bekommt einen eigenen
+Slide") aus soll man ein Ziel antippen/auswaehlen koennen, woraufhin ein
+neuer Graph-Slide fuer genau dieses Ziel erscheint (Datenquelle: der
+neue RAM-Ringpuffer aus obigem Punkt). Seitenlayout **exakt** wie der
+bestehende interne DHT11-Graph-Slide (`GraphManager::drawFullScreen()`,
+aktuell fuer `DataSource::Dht11`) - selbe Optik/Aufbau, nur mit den
+Werten des gewaehlten Ziels statt des internen Sensors.
+
+Offene Umsetzungsfragen fuer spaeter: wie die Zielauswahl in der
+Touch-Bedienung genau verankert wird (analog zum bestehenden Tap-Muster
+fuer Zahnrad-/Info-Icon in `main.cpp`, oder direktes Antippen einer Zeile
+in der Uebersichtstabelle), und wie man von der Graph-Ansicht wieder
+zurueck zur Uebersicht kommt (eigener State ausserhalb der normalen
+Slide-Rotation, aehnlich wie die Settings-/Info-UI heute schon als
+blockierende Sub-Screens funktionieren).
