@@ -144,7 +144,11 @@ void drawStaticSourceList(DisplayManager &display) {
 		int16_t y = kSourceRowY + static_cast<int16_t>(i) * kSourceRowH;
 		tft.drawRect(10, y, kScreenW - 20, kSourceRowH - 6, TFT_BLACK);
 		tft.setTextDatum(MC_DATUM);
-		tft.setTextFont(4);
+		// Font 2 (16px) statt Font 4 (26px): bei 7 Quellen ist die Zeilenhoehe
+		// nur noch 28px (Box 22px) - Font 4 ragte oben/unten aus der Box und
+		// die Labels benachbarter Zeilen ueberlappten optisch. Font 2 passt
+		// bequem und laesst auch das breite "Sensormeter Uebersicht" Platz.
+		tft.setTextFont(2);
 		tft.drawString(dataSourceLabel(kAvailableDataSources[i]), kScreenW / 2, y + (kSourceRowH - 6) / 2);
 		tft.setTextDatum(TL_DATUM);
 	}

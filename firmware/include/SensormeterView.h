@@ -32,6 +32,13 @@ public:
 	void drawOverview(DisplayManager &display, const SensormeterManager &manager, int16_t contentTop,
 	                   int16_t contentBottom, uint16_t bgColor);
 
+	// Trefferpruefung fuer die Uebersicht: liefert den Ziel-Index (0-basiert,
+	// wie manager.targetCount()) der angetippten Zeile oder -1. Nutzt exakt
+	// dieselbe Zeilen-Geometrie wie drawOverview() (gemeinsamer Helfer in der
+	// .cpp), damit Tap-Bereich und gezeichnete Zeile deckungsgleich sind.
+	int overviewHitTest(const SensormeterManager &manager, int16_t contentTop, int16_t contentBottom,
+	                     int16_t x, int16_t y) const;
+
 private:
 	static constexpr uint32_t kSubSlideIntervalMs = 4000;
 

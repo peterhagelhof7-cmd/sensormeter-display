@@ -119,7 +119,33 @@ String formatUptime(uint32_t totalSeconds) {
 	}
 	return String(buf);
 }
+// Gemeinsame Zeilen-Geometrie der Uebersicht - von drawOverview() (Zeichnen)
+// und overviewHitTest() (Tap) genutzt, damit beide garantiert dieselben
+// Zeilenhoehen/-positionen verwenden. targetCount muss > 0 sein.
+void overviewRowGeometry(int16_t contentTop, int16_t contentBottom, size_t targetCount, int16_t &rowTop,
+                          int16_t &rowH) {
+	int16_t h = contentBottom - contentTop;
+	rowTop = contentTop + 24;
+	int16_t rh = static_cast<int16_t>((h - 24) / static_cast<int16_t>(targetCount));
+	if (rh > 32) rh = 32;
+	if (rh < 16) rh = 16;
+	rowH = rh;
+}
 } // namespace
+
+int SensormeterView::overviewHitTest(const SensormeterManager &manager, int16_t contentTop,
+                                      int16_t contentBottom, int16_t x, int16_t y) const {
+	(void)x;  // ganze Zeilenbreite ist antippbar - x nicht eingeschraenkt
+	size_t count = manager.targetCount();
+	if (count == 0) return -1;
+	int16_t rowTop, rowH;
+	overviewRowGeometry(contentTop, contentBottom, count, rowTop, rowH);
+	for (size_t i = 0; i < count; i++) {
+		int16_t rowY = rowTop + static_cast<int16_t>(i) * rowH;
+		if (y >= rowY && y < rowY + rowH) return static_cast<int>(i);
+	}
+	return -1;
+}
 
 void SensormeterView::drawOverview(DisplayManager &display, const SensormeterManager &manager, int16_t contentTop,
                                     int16_t contentBottom, uint16_t bgColor) {
@@ -141,10 +167,8 @@ void SensormeterView::drawOverview(DisplayManager &display, const SensormeterMan
 	tft.setTextDatum(TL_DATUM);
 	tft.drawString("Sensormeter - Uebersicht", 8, contentTop + 4);
 
-	int16_t rowTop = contentTop + 24;
-	int16_t rowH = (h - 24) / static_cast<int16_t>(manager.targetCount());
-	if (rowH > 32) rowH = 32;
-	if (rowH < 16) rowH = 16;
+	int16_t rowTop, rowH;
+	overviewRowGeometry(contentTop, contentBottom, manager.targetCount(), rowTop, rowH);
 
 	for (size_t i = 0; i < manager.targetCount(); i++) {
 		int16_t y = rowTop + static_cast<int16_t>(i) * rowH;

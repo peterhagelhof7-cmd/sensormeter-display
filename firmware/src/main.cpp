@@ -28,6 +28,7 @@
 #include "AlertEvaluator.h"
 #include "BrandingManager.h"
 #include "BrandingView.h"
+#include "DisplayMirror.h"
 
 // Anders als bei den Schwesterprojekten ist config.h hier NICHT
 // verpflichtend (kein #error bei Fehlen) - dieses Projekt braucht zur
@@ -93,8 +94,11 @@ SettingsUI settingsUI;
 OtaManager ota;
 BrandingManager brandingManager;
 BrandingView brandingView;
+// Vom Hauptloop befuellter Momentanzustand des Displays fuer den Web-Spiegel.
+// Muss VOR webServer stehen (Konstruktor nimmt eine const-Referenz darauf).
+DisplayMirrorState mirrorState;
 WebServerManager webServer(settings, backlight, ota, wlan, sensormeterManager, sensor, pingManager, graph,
-                            brandingManager);
+                            brandingManager, mirrorState);
 
 // Serial-Kommandozeile fuer den Fall, dass das Geraet nur per USB, aber
 // nicht per Netzwerk erreichbar ist (z.B. falsche/unbekannte
@@ -255,6 +259,14 @@ constexpr uint32_t kStatusBarIntervalMs = 300;
 
 uint32_t slideLastSwitchMs = 0;
 size_t slideIndex = 0;
+// Drill-down aus der Sensormeter-Uebersicht: Nach Tippen auf ein sm wird
+// dessen Detail-Slide "gehalten" (Auto-Rotation angehalten), bis irgendwo
+// zuruueckgetippt wird. Nur im Slide-Modus (Nutzeranforderung). heldTarget/
+// heldSensor identifizieren das gehaltene Ziel stabil, auch wenn sich die
+// Slide-Liste zwischen zwei loop()-Durchlaeufen umsortiert.
+bool slideHeld = false;
+int8_t heldTarget = -1;
+uint8_t heldSensor = 0;
 bool contentDirty = true;
 uint32_t lastPeriodicRedrawMs = 0;
 constexpr uint32_t kPeriodicRedrawIntervalMs = 5000;
@@ -320,6 +332,21 @@ void buildSlideEntries() {
 	slideEntries[slideEntryCount++] = {DataSource::Ping};
 	slideEntries[slideEntryCount++] = {DataSource::PingTargets};
 	slideEntries[slideEntryCount++] = {DataSource::Branding};
+}
+
+// Sucht in der aktuellen slideEntries-Liste den Index eines Eintrags. Fuer
+// type==Sensormeter muessen zusaetzlich smTargetIndex/smSensorIndex passen,
+// fuer andere Typen zaehlt nur der Typ. -1, wenn nicht vorhanden.
+int findSlideIndex(DataSource type, int8_t targetIdx, uint8_t sensorIdx) {
+	for (size_t i = 0; i < slideEntryCount; i++) {
+		if (slideEntries[i].type != type) continue;
+		if (type == DataSource::Sensormeter &&
+		    (slideEntries[i].smTargetIndex != targetIdx || slideEntries[i].smSensorIndex != sensorIdx)) {
+			continue;
+		}
+		return static_cast<int>(i);
+	}
+	return -1;
 }
 
 void setup() {
@@ -393,6 +420,11 @@ SlideEntry currentActiveSource() {
 	}
 	if (slideIndex >= slideEntryCount) slideIndex = 0;
 
+	// Gehaltener Drill-down: keine Auto-Rotation, aktuelles Slide bleibt stehen.
+	if (slideHeld) {
+		return slideEntries[slideIndex];
+	}
+
 	uint32_t now = millis();
 	uint32_t intervalMs = static_cast<uint32_t>(settings.slideIntervalSec()) * 1000UL;
 	if (now - slideLastSwitchMs >= intervalMs) {
@@ -411,6 +443,22 @@ void loop() {
 	// Static-Modus ungenutzt (currentActiveSource() umgeht die Liste dort
 	// komplett), daher nicht extra gegate't - der Aufbau ist guenstig genug.
 	buildSlideEntries();
+
+	// Gehaltenen Drill-down stabil nachfuehren: das gehaltene Ziel kann in der
+	// neu aufgebauten Liste an anderer Position stehen (weitere Ziele aufgeloest/
+	// weggefallen). Verschwindet es ganz (nicht mehr erreichbar), Haltung loesen
+	// und zurueck zur Uebersicht.
+	if (slideHeld) {
+		int idx = findSlideIndex(DataSource::Sensormeter, heldTarget, heldSensor);
+		if (idx >= 0) {
+			slideIndex = static_cast<size_t>(idx);
+		} else {
+			slideHeld = false;
+			int ov = findSlideIndex(DataSource::SensormeterOverview, -1, 0);
+			if (ov >= 0) slideIndex = static_cast<size_t>(ov);
+			contentDirty = true;
+		}
+	}
 
 	// Zahnrad in der Statusleiste antippbar - oeffnet die Einstellungen
 	// (blockierend). Erst auf Loslassen warten, damit der modale Dialog
@@ -449,22 +497,63 @@ void loop() {
 		brandingView.forceRedraw();
 	}
 
-	// Ansichtswechsel per Tippen auf die linke (vorige) bzw. rechte
-	// (naechste) Bildschirmhaelfte im Inhaltsbereich - zusaetzlich zum
-	// automatischen Wechsel im Slide-Modus. Im Static-Modus gibt es keine
-	// "naechste" Ansicht (Nutzer hat genau eine feste Quelle gewaehlt,
-	// siehe SettingsUI), daher dort ohne Wirkung.
+	// Inhaltsbereich-Tap im Slide-Modus. Drei Faelle:
+	//  1. Gehaltenes sm sichtbar        -> irgendein Tap loest die Haltung und
+	//                                       kehrt zur Uebersicht zurueck.
+	//  2. Uebersicht sichtbar, Tap auf
+	//     eine (aufgeloeste) sm-Zeile   -> in dessen Detail-Slide springen und
+	//                                       halten (Auto-Rotation stoppt).
+	//  3. sonst                         -> wie bisher linke/rechte Haelfte =
+	//                                       vorheriges/naechstes Slide.
+	// Im Static-Modus gibt es keine "naechste" Ansicht, daher dort ohne Wirkung
+	// (Nutzeranforderung: Drill-down nur im Slide-Modus).
 	if (touchedNow && settings.mode() == OperatingMode::Slide && ty >= Layout::kContentTop &&
 	    ty < Layout::kContentBottom) {
-		bool tappedLeft = tx < DisplayManager::kScreenWidth / 2;
+		bool overviewShown = (slideEntryCount > 0 && slideIndex < slideEntryCount &&
+		                      slideEntries[slideIndex].type == DataSource::SensormeterOverview);
+		int16_t pressX = tx, pressY = ty;
+		bool tappedLeft = pressX < DisplayManager::kScreenWidth / 2;
 		while (touch.read(tx, ty)) {
 			delay(15);
 		}
-		if (slideEntryCount > 0) {
-			slideIndex = (slideIndex + (tappedLeft ? slideEntryCount - 1 : 1)) % slideEntryCount;
+
+		if (slideHeld) {
+			// Fall 1: zurueck zur Uebersicht, Haltung loesen, Rotation weiter.
+			slideHeld = false;
+			int ov = findSlideIndex(DataSource::SensormeterOverview, -1, 0);
+			if (ov >= 0) slideIndex = static_cast<size_t>(ov);
+			slideLastSwitchMs = millis();
+			contentDirty = true;
+		} else if (overviewShown) {
+			int target = sensormeterView.overviewHitTest(sensormeterManager, Layout::kContentTop,
+			                                              Layout::kContentBottom, pressX, pressY);
+			int detailIdx = -1;
+			if (target >= 0 && sensormeterManager.isResolved(static_cast<size_t>(target))) {
+				detailIdx = findSlideIndex(DataSource::Sensormeter, static_cast<int8_t>(target), 0);
+			}
+			if (detailIdx >= 0) {
+				// Fall 2: hineinspringen + halten.
+				slideIndex = static_cast<size_t>(detailIdx);
+				heldTarget = static_cast<int8_t>(target);
+				heldSensor = 0;
+				slideHeld = true;
+				contentDirty = true;
+			} else {
+				// Tap nicht auf einer aufgeloesten Zeile -> wie Fall 3.
+				if (slideEntryCount > 0) {
+					slideIndex = (slideIndex + (tappedLeft ? slideEntryCount - 1 : 1)) % slideEntryCount;
+				}
+				slideLastSwitchMs = millis();
+				contentDirty = true;
+			}
+		} else {
+			// Fall 3: vorheriges/naechstes Slide.
+			if (slideEntryCount > 0) {
+				slideIndex = (slideIndex + (tappedLeft ? slideEntryCount - 1 : 1)) % slideEntryCount;
+			}
+			slideLastSwitchMs = millis();
+			contentDirty = true;
 		}
-		slideLastSwitchMs = millis();
-		contentDirty = true;
 	}
 
 	bool dhtPolled = sensor.update(settings);
@@ -488,6 +577,16 @@ void loop() {
 	DataSource activeSource = activeEntry.type;
 	bool showBottomBar = !(settings.mode() == OperatingMode::Static && activeSource == DataSource::Uhrzeit);
 	int16_t contentBottom = showBottomBar ? Layout::kContentBottom : DisplayManager::kScreenHeight;
+
+	// Momentanzustand fuer den Web-Spiegel (/display, /api/display) - genau das,
+	// was gleich auch gezeichnet wird.
+	mirrorState.activeSource = activeSource;
+	mirrorState.smTargetIndex = activeEntry.smTargetIndex;
+	mirrorState.smSensorIndex = activeEntry.smSensorIndex;
+	mirrorState.held = slideHeld;
+	mirrorState.alertActive = alert.active;
+	mirrorState.alertBlue = alert.blue;
+	mirrorState.mode = settings.mode();
 
 	uint32_t now = millis();
 	// Uhrzeit-, Sensormeter- und Sensormeter-Uebersichts-Ansicht brauchen

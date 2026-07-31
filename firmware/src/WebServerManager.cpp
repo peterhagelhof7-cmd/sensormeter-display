@@ -34,6 +34,52 @@ String escapeHtml(const String &in) {
 	return out;
 }
 
+// JSON-String-Escaping fuer /api/display (Systemnamen koennen Anfuehrungs-
+// zeichen/Backslashes/Steuerzeichen enthalten). Ausgabe ohne umschliessende
+// Anfuehrungszeichen - die setzt der Aufrufer.
+String jsonEscape(const String &in) {
+	String out;
+	out.reserve(in.length() + 8);
+	for (size_t i = 0; i < in.length(); i++) {
+		char c = in[i];
+		switch (c) {
+			case '"': out += "\\\""; break;
+			case '\\': out += "\\\\"; break;
+			case '\n': out += "\\n"; break;
+			case '\r': out += "\\r"; break;
+			case '\t': out += "\\t"; break;
+			default:
+				if (static_cast<uint8_t>(c) < 0x20) {
+					char buf[7];
+					snprintf(buf, sizeof(buf), "\\u%04x", c);
+					out += buf;
+				} else {
+					out += c;
+				}
+		}
+	}
+	return out;
+}
+
+// Uptime-Formatierung fuer den Web-Spiegel, identisch zur Display-Uebersicht
+// (SensormeterView.cpp): ab 1 Tag "Nd HH:MM", darunter "HH:MM:SS".
+String formatUptimeWeb(uint32_t totalSeconds) {
+	uint32_t days = totalSeconds / 86400;
+	uint32_t rem = totalSeconds % 86400;
+	uint32_t hh = rem / 3600;
+	uint32_t mm = (rem % 3600) / 60;
+	uint32_t ss = rem % 60;
+	char buf[24];
+	if (days > 0) {
+		snprintf(buf, sizeof(buf), "%ud %02u:%02u", static_cast<unsigned>(days), static_cast<unsigned>(hh),
+		         static_cast<unsigned>(mm));
+	} else {
+		snprintf(buf, sizeof(buf), "%02u:%02u:%02u", static_cast<unsigned>(hh), static_cast<unsigned>(mm),
+		         static_cast<unsigned>(ss));
+	}
+	return String(buf);
+}
+
 // Formularfelder fuer Warnschwellwerte sind optional: leer = kein
 // Schwellwert (SettingsManager::kThresholdDisabled bzw. 0 bei Ping-Latenz).
 int16_t parseOptionalThreshold(AsyncWebServerRequest *request, const char *name) {
@@ -171,7 +217,8 @@ void buildLogoBmp(const uint8_t *rgb565, uint8_t *out) {
 WebServerManager::WebServerManager(SettingsManager &settings, BacklightManager &backlight, OtaManager &ota,
                                     WlanManager &wlan, const SensormeterManager &sensormeterManager,
                                     const SensorManager &sensor, const PingManager &pingManager,
-                                    GraphManager &graph, BrandingManager &brandingManager)
+                                    GraphManager &graph, BrandingManager &brandingManager,
+                                    const DisplayMirrorState &mirror)
     : settings_(settings),
       backlight_(backlight),
       ota_(ota),
@@ -180,7 +227,8 @@ WebServerManager::WebServerManager(SettingsManager &settings, BacklightManager &
       sensor_(sensor),
       pingManager_(pingManager),
       graph_(graph),
-      brandingManager_(brandingManager) {}
+      brandingManager_(brandingManager),
+      mirror_(mirror) {}
 
 bool WebServerManager::checkAuth(AsyncWebServerRequest *request) const {
 	if (!request->authenticate("admin", settings_.webPassword().c_str())) {
@@ -431,6 +479,243 @@ String WebServerManager::dhtGraphSvg() const {
 	return svg;
 }
 
+// JSON-Momentaufnahme des Displays fuer den Web-Spiegel. Enthaelt Modus,
+// Halten-Zustand, Alarm und den Datenblock GENAU der aktuell aktiven Quelle
+// (mirror_ wird vom Hauptloop gesetzt, siehe DisplayMirror.h). Bewusst nur
+// die aktive Quelle statt aller Werte, damit /display 1:1 das Slide abbildet.
+String WebServerManager::buildDisplayJson() const {
+	auto sourceKey = [](DataSource s) -> const char * {
+		switch (s) {
+			case DataSource::Dht11: return "dht";
+			case DataSource::Uhrzeit: return "clock";
+			case DataSource::Sensormeter: return "sensormeter";
+			case DataSource::SensormeterOverview: return "overview";
+			case DataSource::Ping: return "ping";
+			case DataSource::PingTargets: return "pingtargets";
+			case DataSource::Branding: return "branding";
+		}
+		return "dht";
+	};
+
+	String j = "{";
+	j += "\"mode\":\"";
+	j += (mirror_.mode == OperatingMode::Static ? "static" : "slide");
+	j += "\",\"held\":";
+	j += (mirror_.held ? "true" : "false");
+	j += ",\"alert\":{\"active\":";
+	j += (mirror_.alertActive ? "true" : "false");
+	j += ",\"blue\":";
+	j += (mirror_.alertBlue ? "true" : "false");
+	j += "},\"source\":\"";
+	j += sourceKey(mirror_.activeSource);
+	j += "\",\"deviceName\":\"" + jsonEscape(settings_.deviceName()) + "\",";
+
+	char num[16];
+	switch (mirror_.activeSource) {
+		case DataSource::Dht11: {
+			bool v = sensor_.hasValidReading();
+			j += "\"dht\":{\"valid\":";
+			j += (v ? "true" : "false");
+			if (v) {
+				snprintf(num, sizeof(num), "%.1f", sensor_.temperatureC());
+				j += ",\"temp\":";
+				j += num;
+				snprintf(num, sizeof(num), "%.1f", sensor_.humidityPercent());
+				j += ",\"hum\":";
+				j += num;
+			}
+			j += "}";
+			break;
+		}
+		case DataSource::Uhrzeit:
+			j += "\"clock\":{\"time\":\"" + jsonEscape(TimeSync::formatTime()) + "\",\"date\":\"" +
+			     jsonEscape(TimeSync::formatDate()) + "\"}";
+			break;
+		case DataSource::Sensormeter: {
+			j += "\"sensormeter\":{";
+			int t = mirror_.smTargetIndex;
+			if (t >= 0 && static_cast<size_t>(t) < sensormeterManager_.targetCount()) {
+				uint8_t s = mirror_.smSensorIndex;
+				j += "\"name\":\"" + jsonEscape(sensormeterManager_.systemName(static_cast<size_t>(t))) + "\",";
+				j += "\"sensor\":\"" + jsonEscape(sensormeterManager_.sensorName(static_cast<size_t>(t), s)) + "\",";
+				bool v = sensormeterManager_.sensorValid(static_cast<size_t>(t), s);
+				j += "\"valid\":";
+				j += (v ? "true" : "false");
+				if (v) {
+					snprintf(num, sizeof(num), "%.1f", sensormeterManager_.sensorTempC(static_cast<size_t>(t), s));
+					j += ",\"temp\":";
+					j += num;
+					snprintf(num, sizeof(num), "%.1f",
+					         sensormeterManager_.sensorHumidityPct(static_cast<size_t>(t), s));
+					j += ",\"hum\":";
+					j += num;
+				}
+			} else {
+				j += "\"valid\":false,\"placeholder\":true";
+			}
+			j += "}";
+			break;
+		}
+		case DataSource::SensormeterOverview: {
+			j += "\"overview\":[";
+			size_t n = sensormeterManager_.targetCount();
+			for (size_t i = 0; i < n; i++) {
+				if (i) j += ",";
+				String name = sensormeterManager_.systemName(i);
+				if (name.isEmpty()) name = "(Ziel " + String(i + 1) + ")";
+				bool res = sensormeterManager_.isResolved(i);
+				j += "{\"name\":\"" + jsonEscape(name) + "\",\"resolved\":";
+				j += (res ? "true" : "false");
+				j += ",\"uptime\":\"";
+				if (res && sensormeterManager_.uptimeValid(i)) {
+					j += jsonEscape(formatUptimeWeb(sensormeterManager_.uptimeSeconds(i)));
+				} else if (!res) {
+					j += "nicht erreichbar";
+				} else {
+					j += "--";
+				}
+				j += "\"}";
+			}
+			j += "]";
+			break;
+		}
+		case DataSource::Ping: {
+			bool v = pingManager_.hasGoogleReading();
+			j += "\"ping\":{\"valid\":";
+			j += (v ? "true" : "false");
+			if (v) {
+				snprintf(num, sizeof(num), "%.0f", pingManager_.googleAverageLatencyMs());
+				j += ",\"avg\":";
+				j += num;
+			}
+			j += ",\"failing\":";
+			j += (pingManager_.isFailingOver1Min() ? "true" : "false");
+			j += "}";
+			break;
+		}
+		case DataSource::PingTargets: {
+			j += "\"pingtargets\":[";
+			size_t n = pingManager_.targetCount();
+			for (size_t i = 0; i < n; i++) {
+				if (i) j += ",";
+				j += "{\"ip\":\"" + jsonEscape(pingManager_.targetIp(i)) + "\",\"checked\":";
+				j += (pingManager_.targetChecked(i) ? "true" : "false");
+				j += ",\"ok\":";
+				j += (pingManager_.targetOk(i) ? "true" : "false");
+				if (pingManager_.targetHasLatency(i)) {
+					snprintf(num, sizeof(num), "%.0f", pingManager_.targetLatencyMs(i));
+					j += ",\"latency\":";
+					j += num;
+				}
+				j += "}";
+			}
+			j += "]";
+			break;
+		}
+		case DataSource::Branding:
+			j += "\"branding\":{\"hasLogo\":";
+			j += (brandingManager_.hasLogo() ? "true" : "false");
+			j += "}";
+			break;
+	}
+	j += "}";
+	return j;
+}
+
+// Web-Spiegel-Seite: statisches HTML/JS, das ~1s /api/display pollt und die
+// aktive Quelle als 320x240-Kachel nachbildet. Kein Server-Substitut noetig
+// (deviceName kommt aus dem JSON) - daher als Roh-String.
+String WebServerManager::buildMirrorPage() const {
+	return F(R"HTML(<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Display-Spiegel</title>
+<style>
+ :root{color-scheme:light dark}
+ body{margin:0;background:#0c1016;color:#e8edf4;font-family:system-ui,Segoe UI,Roboto,sans-serif;
+      display:flex;flex-direction:column;align-items:center;gap:14px;padding:18px}
+ a{color:#7fb2ff}
+ .tile{width:320px;height:240px;border-radius:10px;overflow:hidden;position:relative;
+       box-shadow:0 6px 24px rgba(0,0,0,.45);background:#fff;color:#111;
+       display:flex;flex-direction:column}
+ .top{height:26px;flex:0 0 26px;background:#141b26;color:#cfe0ff;display:flex;align-items:center;
+      justify-content:space-between;padding:0 8px;font-size:12px}
+ .badge{background:#274bdb;color:#fff;border-radius:8px;padding:1px 7px;font-size:11px}
+ .held{background:#b8860b}
+ .body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+       padding:6px 10px;text-align:center}
+ .big{font-size:52px;font-weight:700;line-height:1}
+ .big .u{font-size:22px;font-weight:600;vertical-align:super;margin-left:2px}
+ .pair{display:flex;gap:26px;align-items:baseline}
+ .sub{font-size:14px;color:#333;margin-top:6px}
+ .title{font-size:15px;color:#222;margin-bottom:10px}
+ table{width:100%;border-collapse:collapse;font-size:13px}
+ td{padding:4px 8px;border-bottom:1px solid #e2e6ec;text-align:left}
+ td.r{text-align:right;font-variant-numeric:tabular-nums}
+ .ok{color:#0a8f2a;font-weight:600}.bad{color:#c02626;font-weight:600}
+ .foot{font-size:12px;color:#8894a6}
+ .alert-red{background:#ffdede!important}.alert-blue{background:#dde8ff!important}
+</style></head><body>
+<h2 style="margin:2px 0 0;font-size:16px" id="dev">Display-Spiegel</h2>
+<div class="foot">Live-Nachbildung des Geraetebildschirms &middot; <a href="/">Dashboard</a></div>
+<div class="tile" id="tile">
+ <div class="top"><span id="src">&hellip;</span><span id="badge"></span></div>
+ <div class="body" id="body">verbinde&hellip;</div>
+</div>
+<div class="foot" id="status">&nbsp;</div>
+<script>
+const SRC={dht:"DHT11 (intern)",clock:"Uhrzeit",sensormeter:"Sensormeter",
+ overview:"Sensormeter Uebersicht",ping:"Ping",pingtargets:"Ping-Ziele",branding:"Branding"};
+function esc(s){return (s==null?"":String(s)).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+function n1(x){return (Math.round(x*10)/10).toFixed(1);}
+function render(d){
+ document.getElementById("dev").textContent=d.deviceName||"Display-Spiegel";
+ document.getElementById("src").textContent=SRC[d.source]||d.source;
+ const b=document.getElementById("badge");
+ if(d.held){b.className="badge held";b.textContent="gehalten";}
+ else if(d.mode=="static"){b.className="badge";b.textContent="Static";}
+ else{b.className="badge";b.textContent="Slide";}
+ const tile=document.getElementById("tile");
+ tile.classList.remove("alert-red","alert-blue");
+ if(d.alert&&d.alert.active)tile.classList.add(d.alert.blue?"alert-blue":"alert-red");
+ const body=document.getElementById("body");
+ let h="";
+ if(d.source=="dht"){const o=d.dht||{};
+   h=o.valid?`<div class="pair"><div class="big">${n1(o.temp)}<span class="u">&deg;C</span></div>`+
+     `<div class="big">${n1(o.hum)}<span class="u">%</span></div></div>`:`<div class="big">--</div>`;
+ }else if(d.source=="clock"){const o=d.clock||{};
+   h=`<div class="big" style="font-size:60px">${esc(o.time||"--:--")}</div><div class="sub">${esc(o.date||"")}</div>`;
+ }else if(d.source=="sensormeter"){const o=d.sensormeter||{};
+   if(o.placeholder||o.name==null){h=`<div class="title">Sensormeter</div><div class="big">--</div>`;}
+   else{const t=esc(o.name)+(o.sensor?" ("+esc(o.sensor)+")":"");
+     h=`<div class="title">${t}</div>`+ (o.valid?
+       `<div class="pair"><div class="big">${n1(o.temp)}<span class="u">&deg;C</span></div>`+
+       `<div class="big">${n1(o.hum)}<span class="u">%</span></div></div>`:`<div class="big">--</div>`);}
+ }else if(d.source=="overview"){const r=d.overview||[];
+   h=`<table>`+r.map(x=>`<tr><td>${esc(x.name)}</td><td class="r ${x.resolved?"":"bad"}">${esc(x.uptime)}</td></tr>`).join("")+`</table>`;
+   if(!r.length)h=`<div class="sub">Kein Sensormeter-Ziel konfiguriert</div>`;
+ }else if(d.source=="ping"){const o=d.ping||{};
+   h=o.valid?`<div class="big">${Math.round(o.avg)}<span class="u">ms</span></div>`:`<div class="big">--</div>`;
+   h+=`<div class="sub ${o.failing?"bad":"ok"}">${o.failing?"Ausfall &gt;1min":"Ping ok"}</div>`;
+ }else if(d.source=="pingtargets"){const r=d.pingtargets||[];
+   h=`<table>`+r.map(x=>`<tr><td>${esc(x.ip)}</td><td class="r">`+
+     (x.checked?(x.ok?`<span class="ok">${x.latency!=null?Math.round(x.latency)+" ms":"ok"}</span>`:`<span class="bad">Fehler</span>`):"&hellip;")+
+     `</td></tr>`).join("")+`</table>`;
+   if(!r.length)h=`<div class="sub">Keine Ping-Ziele</div>`;
+ }else if(d.source=="branding"){const o=d.branding||{};
+   h=`<div class="title">${esc(d.deviceName||"")}</div><div class="sub">${o.hasLogo?"Logo am Geraet hinterlegt":"Kein Logo"}</div>`;
+ }else{h=`<div class="sub">${esc(d.source)}</div>`;}
+ body.innerHTML=h;
+}
+async function tick(){
+ try{const r=await fetch("/api/display",{cache:"no-store"});const d=await r.json();render(d);
+   document.getElementById("status").textContent="Aktualisiert "+new Date().toLocaleTimeString();
+ }catch(e){document.getElementById("status").textContent="Keine Verbindung – erneuter Versuch…";}
+}
+tick();setInterval(tick,1000);
+</script></body></html>)HTML");
+}
+
 // Oeffentliches Status-Dashboard: kein Login, keine Formulare, nur
 // Anzeige - Auto-Refresh alle 30s per Meta-Tag (kein JS nötig). Nutzt
 // dieselbe computeAlertInfo()-Logik wie main.cpp (siehe AlertEvaluator.h),
@@ -454,6 +739,9 @@ String WebServerManager::buildDashboardPage() const {
 	}
 	html += bannerHtml("Sensormeter Display · Live-Status", subLine, "/settings", "Einstellungen");
 	html += brandingBannerHtml();
+	// Link zum Live-Spiegel des Geraetebildschirms (zeigt genau das aktive Slide).
+	html += "<p style=\"margin:10px 0 0\"><a href=\"/display\">&#128250; Display-Spiegel (Live-Ansicht des "
+	        "Bildschirms)</a></p>";
 
 	if (alert.active) {
 		html += "<div class=\"alertbar" + String(alert.blue ? " blue" : "") + "\">";
@@ -1292,6 +1580,13 @@ void WebServerManager::begin() {
 	// Live-Status-Dashboard, siehe docs/entscheidungen.md.
 	server_.on("/", HTTP_GET, [this](AsyncWebServerRequest *request) {
 		request->send(200, "text/html", buildDashboardPage());
+	});
+	// Web-Spiegel des Displays - oeffentlich wie das Dashboard (nur lesend).
+	server_.on("/display", HTTP_GET, [this](AsyncWebServerRequest *request) {
+		request->send(200, "text/html", buildMirrorPage());
+	});
+	server_.on("/api/display", HTTP_GET, [this](AsyncWebServerRequest *request) {
+		request->send(200, "application/json", buildDisplayJson());
 	});
 	server_.on("/settings", HTTP_GET, [this](AsyncWebServerRequest *request) {
 		if (!checkAuth(request)) return;

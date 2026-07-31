@@ -12,6 +12,7 @@
 #include "PingManager.h"
 #include "GraphManager.h"
 #include "BrandingManager.h"
+#include "DisplayMirror.h"
 
 // Webserver mit zwei Seiten (siehe docs/entscheidungen.md):
 // - "/" : oeffentliches, NICHT passwortgeschuetztes Status-Dashboard
@@ -31,7 +32,8 @@ public:
 	// SVG-Verlaufsgraph im Dashboard.
 	WebServerManager(SettingsManager &settings, BacklightManager &backlight, OtaManager &ota, WlanManager &wlan,
 	                  const SensormeterManager &sensormeterManager, const SensorManager &sensor,
-	                  const PingManager &pingManager, GraphManager &graph, BrandingManager &brandingManager);
+	                  const PingManager &pingManager, GraphManager &graph, BrandingManager &brandingManager,
+	                  const DisplayMirrorState &mirror);
 
 	void begin();
 
@@ -41,6 +43,14 @@ private:
 	// gesetzt, wenn der aufrufende Redirect "?saved=1" mitgibt.
 	String buildSettingsPage(bool saved) const;
 	String buildDashboardPage() const;
+	// Web-Spiegel des Displays (Nutzeranforderung "B"): /display liefert eine
+	// als 320x240-Kachel gestylte Seite, die per JavaScript ~1s /api/display
+	// (JSON) pollt und genau das aktuell aktive Slide nachbildet (inkl.
+	// Drill-down/Halten und Alarm-Hintergrund). Echtes Pixel-Auslesen des
+	// TFT ist auf diesem PSRAM-losen Board nicht praktikabel (siehe
+	// docs/entscheidungen.md) - daher Daten-, kein Pixel-Spiegel.
+	String buildMirrorPage() const;
+	String buildDisplayJson() const;
 	String sharedCss() const;
 	// linkHref leer = kein Link-Badge (nicht gebraucht, wenn eine Seite
 	// eh nur die andere Richtung anbieten wuerde).
@@ -90,6 +100,7 @@ private:
 	const PingManager &pingManager_;
 	GraphManager &graph_;
 	BrandingManager &brandingManager_;
+	const DisplayMirrorState &mirror_;
 	AsyncWebServer server_{80};
 
 	bool otaInProgress_ = false;

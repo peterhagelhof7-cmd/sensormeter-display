@@ -1905,3 +1905,42 @@ Hardware getestet.
 Betrifft auch `sensormeter`/`sensormeter-poe`/`sensormeter-wlan` (dort
 keine Code-Aenderung noetig, nur Lastenheft-Anpassung - siehe jeweils
 eigener Eintrag).
+
+## 2026-07-31 — Übersicht-Drill-down (Halten), Static-Liste Font 2, Web-Display-Spiegel
+
+Drei Punkte, alle auf realer Hardware (COM16, IP 192.168.77.7) geflasht
+und geprueft; `pio run` erfolgreich (27,9 % RAM / 83,2 % Flash).
+
+**1) Drill-down aus der Sensormeter-Uebersicht.** Bisher zeichnete die
+Uebersicht (`SensormeterView::drawOverview`) nur eine Zeilenliste; ein Tap
+loeste ausschliesslich das linke/rechte prev/next-Blaettern aus - ein
+gezieltes "zeige nur dieses sm" war nicht implementiert. Neu:
+`SensormeterView::overviewHitTest()` (teilt sich die Zeilen-Geometrie ueber
+`overviewRowGeometry()` mit `drawOverview`, damit Tap-Flaeche und gezeichnete
+Zeile deckungsgleich sind). In `main.cpp` wird ein Tap auf eine erreichbare
+sm-Zeile zum Detail-Slide dieses Ziels und **haelt** dort (Auto-Rotation
+gestoppt) bis irgendwo zurueckgetippt wird. Nutzerentscheidung: **nur im
+Slide-Modus** (im Static-Modus bewusst inaktiv). Das gehaltene Ziel wird
+ueber `heldTarget/heldSensor` stabil nachgefuehrt, falls sich die Slide-Liste
+zwischen zwei loop()-Durchlaeufen umsortiert; wird es unerreichbar, loest
+sich die Haltung automatisch und es geht zurueck zur Uebersicht.
+
+**2) Static-Auswahlliste (Einstellungen > Static) ueberlappte.** Mit der 7.
+Datenquelle war die Zeilenhoehe auf 28px (Box 22px) verkleinert worden, der
+Font aber auf 4 (~26px) geblieben - der Text ragte aus den Boxen und die
+Labels benachbarter Zeilen ueberlappten optisch. Fix: Listen-Labels in
+`drawStaticSourceList()` auf **Font 2 (16px)**, konsistent mit den uebrigen
+Listen (`drawSensormeterList`/Ping-Liste). Nur Font geaendert, Geometrie/
+Hit-Test unveraendert.
+
+**3) Web-Spiegel des Displays (Nutzeranforderung "B": echtes Nachbild).**
+Ein Pixel-Screenshot ist auf diesem PSRAM-losen ESP-WROOM-32 nicht
+praktikabel (kein Framebuffer im RAM; ein 320x240x16bit-Sprite = ~150 KB
+laesst sich neben WLAN+Async-Webserver nicht zuverlaessig allokieren;
+ST7789-Readback ueber MISO ist langsam/unzuverlaessig). Stattdessen
+**Daten-Spiegel**: Der Hauptloop fuellt bei jedem Durchlauf einen
+`DisplayMirrorState` (aktive Quelle, sm-Ziel/Sensor, held, Alarm, Modus);
+neuer JSON-Endpunkt `/api/display` liefert genau den Datenblock der aktiven
+Quelle, und `/display` (oeffentlich, vom Dashboard verlinkt) bildet als
+320x240-Kachel per ~1s-Polling exakt das aktive Slide nach - inkl.
+"gehalten"-Badge, Slide/Static-Anzeige und Alarm-Hintergrund (rot/blau).
