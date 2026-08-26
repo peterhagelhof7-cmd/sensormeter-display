@@ -44,8 +44,8 @@
 <body>
 <main>
   <h1>Sensormeter Display — Web-Flasher</h1>
-  <p class="sub">Firmware direkt aus dem Browser auf das ESP32-Touchdisplay (Board HW-458B) flashen.
-    Kein Tool-Setup nötig.</p>
+  <p class="sub">Firmware direkt aus dem Browser aufs ESP32-Touchdisplay flashen — für beide
+    Varianten (2,8" und 7"). Kein Tool-Setup nötig.</p>
 
   <div class="note unsupported" id="browserWarn">
     ⚠ Dieser Browser unterstützt <b>Web Serial</b> nicht. Bitte <b>Chrome, Edge oder Opera am Desktop</b>
@@ -53,21 +53,35 @@
   </div>
 
   <div class="card">
-    <h2>Firmware flashen</h2>
-    <p class="muted">Die komplette Sensormeter-Display-Firmware (aktuelle Version). Board per USB
-      anstecken, Button klicken, den seriellen Port wählen — der Rest läuft automatisch.</p>
+    <h2>Sensormeter Display — 2,8" (HW-458B)</h2>
+    <p class="muted">ESP-WROOM-32 + 2,8"-TFT (ST7789), resistiver Touch. Board per USB anstecken,
+      Button klicken, den seriellen Port wählen — der Rest läuft automatisch.</p>
     <p style="margin-top:14px">
       <esp-web-install-button manifest="manifest.json">
-        <button slot="activate">Firmware flashen</button>
+        <button slot="activate">2,8"-Firmware flashen</button>
         <span slot="unsupported"></span>
         <span slot="not-allowed"></span>
       </esp-web-install-button>
     </p>
-    <div class="note">
-      Nach dem Flashen startet das Gerät die Ersteinrichtung: Auf dem Touchdisplay einen
-      <b>WLAN-Scan</b> ausführen, WLAN wählen und den Schlüssel per Bildschirmtastatur eingeben.
-      Details im <a href="admin-guide.pdf">Admin-Guide</a>.
-    </div>
+  </div>
+
+  <div class="card">
+    <h2>Sensormeter Display XL — 7" (ESP32-8048S070C)</h2>
+    <p class="muted">ESP32-S3 + 7"-800×480-RGB-Display, kapazitiver Touch (GT911). Gleicher
+      Funktionsumfang, größeres Display.</p>
+    <p style="margin-top:14px">
+      <esp-web-install-button manifest="manifest-xl.json">
+        <button slot="activate">7"-Firmware (XL) flashen</button>
+        <span slot="unsupported"></span>
+        <span slot="not-allowed"></span>
+      </esp-web-install-button>
+    </p>
+  </div>
+
+  <div class="note">
+    Nach dem Flashen startet das Gerät die Ersteinrichtung: Auf dem Touchdisplay einen
+    <b>WLAN-Scan</b> ausführen, WLAN wählen und den Schlüssel per Bildschirmtastatur eingeben.
+    Details im <a href="admin-guide.pdf">Admin-Guide</a>.
   </div>
 
   <div class="card">

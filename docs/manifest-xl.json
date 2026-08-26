@@ -1,0 +1,16 @@
+{
+  "name": "Sensormeter Display XL",
+  "version": "0.9.0-rc4",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        { "path": "fw-xl/bootloader.bin", "offset": 0 },
+        { "path": "fw-xl/partitions.bin", "offset": 32768 },
+        { "path": "fw-xl/boot_app0.bin", "offset": 57344 },
+        { "path": "fw-xl/firmware.bin", "offset": 65536 }
+      ]
+    }
+  ]
+}
