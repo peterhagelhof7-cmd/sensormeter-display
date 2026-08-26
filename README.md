@@ -17,7 +17,8 @@ Einstellungs-Webserver (Systemname, Betriebsmodus, Ping-/Sensormeter-Ziele,
 Warnschwellwerte, DHT11-Kalibrierkorrektur) inkl. lokalem OTA-Update per
 `.bin`-Upload.
 
-[**One-Pager (PDF)**](docs/sensormeter-display-onepager.pdf) — kompakte Projektübersicht auf einer Seite.
+[**Web-Flasher**](https://peterhagelhof7-cmd.github.io/sensormeter-display/) — Firmware direkt aus dem Browser (Chrome/Edge/Opera, Web Serial) flashen, kein Tool-Setup.
+&nbsp;·&nbsp; [**One-Pager (PDF)**](docs/sensormeter-display-onepager.pdf) — kompakte Projektübersicht auf einer Seite.
 
 ## Dokumentation
 
