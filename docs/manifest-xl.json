@@ -1,6 +1,6 @@
 {
   "name": "Sensormeter Display XL",
-  "version": "0.9.0-rc4",
+  "version": "0.9.0-rc10",
   "new_install_prompt_erase": true,
   "builds": [
     {
