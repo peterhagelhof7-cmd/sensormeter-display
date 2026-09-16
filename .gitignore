@@ -3,6 +3,6 @@
 **/include/config.h
 *.bin
 # Ausnahme: Web-Flasher-Firmware (GitHub Pages) muss getrackt sein.
-!docs/fw/*.bin
-!docs/fw-xl/*.bin
+# Family-Flasher: alle fw-Verzeichnisse (fw, fw-xl, fw-sm, fw-wlan, fw-poe).
+!docs/fw*/*.bin
 firmware/logs/

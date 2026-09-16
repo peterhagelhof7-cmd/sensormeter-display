@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sensormeter Display — Web-Flasher</title>
+<title>Sensormeter-Familie — Web-Flasher</title>
 <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
 <style>
   :root {
@@ -18,6 +18,8 @@
   main { max-width: 760px; margin: 0 auto; }
   h1 { font-size: 26px; margin: 0 0 4px; }
   h2 { font-size: 18px; margin: 0 0 12px; }
+  h3 { font-size: 14px; text-transform: uppercase; letter-spacing: .06em;
+       color: var(--muted); margin: 26px 0 12px; }
   .sub { color: var(--muted); margin: 0 0 24px; }
   .card {
     background: var(--card); border: 1px solid var(--border); border-radius: 12px;
@@ -25,6 +27,11 @@
   }
   .card p { margin: 8px 0; }
   .muted { color: var(--muted); }
+  .ver {
+    display: inline-block; background: #223; border: 1px solid var(--border);
+    border-radius: 20px; padding: 1px 10px; font-size: 12px; font-weight: 600;
+    color: var(--ok); margin-left: 8px; vertical-align: middle;
+  }
   .note {
     background: #1d2740; border-left: 3px solid var(--accent); border-radius: 6px;
     padding: 10px 14px; margin: 14px 0; color: var(--muted); font-size: 14px;
@@ -43,19 +50,61 @@
 </head>
 <body>
 <main>
-  <h1>Sensormeter Display — Web-Flasher</h1>
-  <p class="sub">Firmware direkt aus dem Browser aufs ESP32-Touchdisplay flashen — für beide
-    Varianten (2,8" und 7"). Kein Tool-Setup nötig.</p>
+  <h1>Sensormeter-Familie — Web-Flasher</h1>
+  <p class="sub">Firmware aller Familien-Geräte direkt aus dem Browser flashen — Sensor-Nodes und
+    Displays. Einheitlicher Stand <b>v1.0.0</b>. Kein Tool-Setup nötig.</p>
 
   <div class="note unsupported" id="browserWarn">
     ⚠ Dieser Browser unterstützt <b>Web Serial</b> nicht. Bitte <b>Chrome, Edge oder Opera am Desktop</b>
     verwenden (Firefox, Safari, iPhone/iPad funktionieren nicht).
   </div>
 
+  <h3>Sensor-Nodes</h3>
+
   <div class="card">
-    <h2>Sensormeter Display — 2,8" (HW-458B)</h2>
-    <p class="muted">ESP-WROOM-32 + 2,8"-TFT (ST7789), resistiver Touch. Board per USB anstecken,
-      Button klicken, den seriellen Port wählen — der Rest läuft automatisch.</p>
+    <h2>Sensormeter <span class="ver">v1.0.0</span></h2>
+    <p class="muted">WT32-ETH01 (ESP32) mit LAN. Temperatur/Feuchte-Erfassung, SNMP/MQTT/Zabbix,
+      Web-Oberfläche.</p>
+    <p style="margin-top:14px">
+      <esp-web-install-button manifest="manifest-sm.json">
+        <button slot="activate">Sensormeter flashen</button>
+        <span slot="unsupported"></span>
+        <span slot="not-allowed"></span>
+      </esp-web-install-button>
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Sensormeter PoE <span class="ver">v1.0.0</span></h2>
+    <p class="muted">Waveshare ESP32-S3-ETH mit PoE. Gleicher Funktionsumfang, Strom + LAN über
+      ein Kabel.</p>
+    <p style="margin-top:14px">
+      <esp-web-install-button manifest="manifest-poe.json">
+        <button slot="activate">Sensormeter PoE flashen</button>
+        <span slot="unsupported"></span>
+        <span slot="not-allowed"></span>
+      </esp-web-install-button>
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Sensormeter WLAN Lite <span class="ver">v1.0.0</span></h2>
+    <p class="muted">ESP32 mit WLAN, display-lose Variante (Reset-Taster + Status-LED). Für
+      Standorte ohne LAN.</p>
+    <p style="margin-top:14px">
+      <esp-web-install-button manifest="manifest-wlan.json">
+        <button slot="activate">WLAN Lite flashen</button>
+        <span slot="unsupported"></span>
+        <span slot="not-allowed"></span>
+      </esp-web-install-button>
+    </p>
+  </div>
+
+  <h3>Displays</h3>
+
+  <div class="card">
+    <h2>Sensormeter Display — 2,8" <span class="ver">v1.0.0</span></h2>
+    <p class="muted">ESP-WROOM-32 + 2,8"-TFT (ST7789, HW-458B), resistiver Touch.</p>
     <p style="margin-top:14px">
       <esp-web-install-button manifest="manifest.json">
         <button slot="activate">2,8"-Firmware flashen</button>
@@ -66,9 +115,8 @@
   </div>
 
   <div class="card">
-    <h2>Sensormeter Display XL — 7" (ESP32-8048S070C)</h2>
-    <p class="muted">ESP32-S3 + 7"-800×480-RGB-Display, kapazitiver Touch (GT911). Gleicher
-      Funktionsumfang, größeres Display.</p>
+    <h2>Sensormeter Display XL — 7" <span class="ver">v1.0.0</span></h2>
+    <p class="muted">ESP32-S3 + 7"-800×480-RGB-Display (ESP32-8048S070C), kapazitiver Touch (GT911).</p>
     <p style="margin-top:14px">
       <esp-web-install-button manifest="manifest-xl.json">
         <button slot="activate">7"-Firmware (XL) flashen</button>
@@ -79,9 +127,10 @@
   </div>
 
   <div class="note">
-    Nach dem Flashen startet das Gerät die Ersteinrichtung: Auf dem Touchdisplay einen
-    <b>WLAN-Scan</b> ausführen, WLAN wählen und den Schlüssel per Bildschirmtastatur eingeben.
-    Details im <a href="admin-guide.pdf">Admin-Guide</a>.
+    <b>Nach dem Flashen:</b> Die <b>Display</b>-Geräte starten die Ersteinrichtung direkt am
+    Touchscreen (WLAN-Scan → WLAN wählen → Schlüssel eingeben). Die <b>Sensor-Nodes</b> gehen bei
+    LAN automatisch online bzw. spannen (WLAN Lite) einen Einrichtungs-Hotspot auf — Details im
+    jeweiligen Admin-Guide.
   </div>
 
   <div class="card">
@@ -91,11 +140,13 @@
       <li><b>Treiber:</b> ggf. den USB-UART-Treiber des Boards installieren (CH340 bzw. CP210x).</li>
       <li><b>Auswahl:</b> im Port-Dialog den seriellen Port des Boards wählen.</li>
       <li>Bricht die Verbindung ab, <b>BOOT/EN</b> am Board kurz betätigen und erneut versuchen.</li>
+      <li>Das richtige Gerät wählen — jede Kachel flasht genau eine Hardware-Variante.</li>
     </ol>
   </div>
 
   <footer>
-    <a href="https://github.com/peterhagelhof7-cmd/sensormeter-display">Projekt auf GitHub</a> ·
+    Sensormeter-Familie ·
+    <a href="https://github.com/peterhagelhof7-cmd/sensormeter-display">GitHub</a> ·
     <a href="admin-guide.pdf">Admin-Guide (PDF)</a>
   </footer>
 </main>

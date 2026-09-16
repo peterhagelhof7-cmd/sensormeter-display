@@ -1,0 +1,16 @@
+{
+  "name": "Sensormeter PoE (ESP32-S3-ETH)",
+  "version": "1.0.0",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        { "path": "fw-poe/bootloader.bin", "offset": 0 },
+        { "path": "fw-poe/partitions.bin", "offset": 32768 },
+        { "path": "fw-poe/boot_app0.bin", "offset": 57344 },
+        { "path": "fw-poe/firmware.bin", "offset": 65536 }
+      ]
+    }
+  ]
+}
